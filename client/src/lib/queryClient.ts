@@ -18,7 +18,10 @@ async function throwIfResNotOk(res: Response) {
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 export async function apiRequest(method, url, data) {
-  const res = await fetch(`${API_BASE}${url}`, {
+  const cleanBase = API_BASE.replace(/\/$/, ""); // remove ending /
+  const cleanUrl = url.startsWith("/") ? url : `/${url}`; // ensure one /
+
+  const res = await fetch(`${cleanBase}${cleanUrl}`, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
