@@ -45,12 +45,6 @@ export function WSProvider({ userId, children }: { userId: string | null; childr
   if (!userId) return;
 
   const API_BASE = import.meta.env.VITE_API_URL || "";
-
-  if (!API_BASE) {
-    console.error("VITE_API_URL not set");
-    return;
-  }
-
   const WS_BASE = API_BASE.replace(/^http/, "ws");
 
   const ws = new WebSocket(`${WS_BASE}/ws`);
@@ -81,7 +75,9 @@ export function WSProvider({ userId, children }: { userId: string | null; childr
     }
   };
 
-  ws.onclose = () => setIsConnected(false);
+  ws.onclose = () => {
+    setIsConnected(false);
+  };
 
   return () => {
     ws.close();
