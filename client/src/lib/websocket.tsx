@@ -44,8 +44,14 @@ export function WSProvider({ userId, children }: { userId: string | null; childr
   useEffect(() => {
   if (!userId) return;
 
-  const API_BASE = import.meta.env.VITE_API_URL;
-  const WS_BASE = API_BASE.replace("https", "wss").replace("http", "ws");
+  const API_BASE = import.meta.env.VITE_API_URL || "";
+
+  if (!API_BASE) {
+    console.error("VITE_API_URL not set");
+    return;
+  }
+
+  const WS_BASE = API_BASE.replace(/^http/, "ws");
 
   const ws = new WebSocket(`${WS_BASE}/ws`);
   wsRef.current = ws;
@@ -70,7 +76,15 @@ export function WSProvider({ userId, children }: { userId: string | null; childr
           queryClient.invalidateQueries();
         }
       }
-    } catch {}
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  ws.onclose = () => setIsConnected(false);
+
+  return () => {
+    ws.close();
   };
 }, [userId]);
 
