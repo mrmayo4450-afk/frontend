@@ -42,16 +42,37 @@ export function WSProvider({ userId, children }: { userId: string | null; childr
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    if (!userId) return;
+  if (!userId) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-    wsRef.current = ws;
+  const API_BASE = import.meta.env.VITE_API_URL;
+  const WS_BASE = API_BASE.replace("https", "wss").replace("http", "ws");
 
-    ws.onopen = () => {
-      setIsConnected(true);
-      ws.send(JSON.stringify({ type: "auth", userId }));
-    };
+  const ws = new WebSocket(`${WS_BASE}/ws`);
+  wsRef.current = ws;
+
+  ws.onopen = () => {
+    setIsConnected(true);
+    ws.send(JSON.stringify({ type: "auth", userId }));
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      setLastMessage(data);
+
+      if (data.type === "data_sync") {
+        const keys = ENTITY_KEYS[data.entity];
+        if (keys) {
+          keys.forEach((key) =>
+            queryClient.invalidateQueries({ queryKey: key })
+          );
+        } else {
+          queryClient.invalidateQueries();
+        }
+      }
+    } catch {}
+  };
+}, [userId]);
 
     ws.onmessage = (e) => {
       try {
