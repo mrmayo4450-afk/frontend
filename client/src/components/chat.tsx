@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { useWS } from "@/lib/websocket";
 import { useToast } from "@/hooks/use-toast";
@@ -277,7 +277,7 @@ function AdminChat() {
                         <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${isAdmin ? "bg-primary text-primary-foreground" : "bg-muted"} ${msg.isPinned ? "ring-1 ring-amber-400" : ""}`}>
                           {msg.content && <p>{msg.content}</p>}
                           {msg.imageUrl && (
-                            <img src={msg.imageUrl} alt="Shared image" className="max-w-[200px] rounded-md border cursor-pointer mt-1" onClick={() => window.open(msg.imageUrl!, '_blank')} data-testid="img-chat-message" />
+                            <img src={resolveUrl(msg.imageUrl)} alt="Shared image" className="max-w-[200px] rounded-md border cursor-pointer mt-1" onClick={() => window.open(resolveUrl(msg.imageUrl!), '_blank')} data-testid="img-chat-message" />
                           )}
                           <p className={`text-xs mt-0.5 ${isAdmin ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                             {formatTime(msg.createdAt)}{msg.isPinned && " 📌"}
@@ -401,7 +401,7 @@ function ClientChat() {
                   {!isMe && <p className="text-xs font-semibold mb-1 text-primary">Admin</p>}
                   {msg.content && <p>{msg.content}</p>}
                   {msg.imageUrl && (
-                    <img src={msg.imageUrl} alt="Shared image" className="max-w-[200px] rounded-md border cursor-pointer mt-1" onClick={() => window.open(msg.imageUrl!, '_blank')} data-testid="img-chat-message" />
+                    <img src={resolveUrl(msg.imageUrl)} alt="Shared image" className="max-w-[200px] rounded-md border cursor-pointer mt-1" onClick={() => window.open(resolveUrl(msg.imageUrl!), '_blank')} data-testid="img-chat-message" />
                   )}
                   <p className={`text-xs mt-0.5 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                     {formatTime(msg.createdAt)}{msg.isPinned && " 📌"}

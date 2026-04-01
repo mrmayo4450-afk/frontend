@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ShoppingBag, Package, MoreHorizontal, CheckCircle, Wallet, AlertTriangle, X, MessageCircle, Info, ShoppingCart, Truck, CircleDot, ChevronDown, ChevronUp, BoxIcon, Clock } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, resolveUrl } from "@/lib/queryClient";
 import { Link } from "wouter";
 import type { Order, Product, Store, User } from "@shared/schema";
 
@@ -370,7 +370,7 @@ export default function MyOrders() {
                           <div className="flex gap-3">
                             <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
                               {product?.imageUrl ? (
-                                <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" data-testid={`img-order-product-${order.id}`} />
+                                <img src={resolveUrl(product.imageUrl)} alt={product.name} className="w-full h-full object-cover" data-testid={`img-order-product-${order.id}`} />
                               ) : (
                                 <Package className="w-8 h-8 text-muted-foreground/40" />
                               )}

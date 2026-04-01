@@ -34,6 +34,16 @@ const ENTITY_KEYS: Record<string, string[][]> = {
   ],
 };
 
+function getWsUrl(): string {
+  const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+  if (apiBase) {
+    const wsBase = apiBase.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
+    return `${wsBase}/ws`;
+  }
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/ws`;
+}
+
 const WSContext = createContext<WSContextType | null>(null);
 
 export function WSProvider({ userId, children }: { userId: string | null; children: ReactNode }) {
@@ -44,8 +54,7 @@ export function WSProvider({ userId, children }: { userId: string | null; childr
   useEffect(() => {
     if (!userId) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    const ws = new WebSocket(getWsUrl());
     wsRef.current = ws;
 
     ws.onopen = () => {

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
@@ -76,7 +76,7 @@ function ImageLightbox({ images, initialIndex, onClose }: { images: string[]; in
       <div className="flex-1 flex items-center justify-center relative overflow-hidden">
         <img
           key={index}
-          src={images[index]}
+          src={resolveUrl(images[index])}
           alt={`Image ${index + 1}`}
           className="max-h-full max-w-full object-contain"
           style={{ userSelect: "none", WebkitUserSelect: "none" }}
@@ -233,7 +233,7 @@ export default function CatalogPage() {
             >
               <div className="aspect-[4/3] w-full bg-green-50 dark:bg-green-900/20 flex items-center justify-center overflow-hidden">
                 {product.imageUrl ? (
-                  <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" data-testid={`img-catalog-${product.id}`} />
+                  <img src={resolveUrl(product.imageUrl)} alt={product.name} className="w-full h-full object-cover" data-testid={`img-catalog-${product.id}`} />
                 ) : (
                   <BookOpen className="w-10 h-10 text-green-300 dark:text-green-700" />
                 )}
@@ -280,7 +280,7 @@ export default function CatalogPage() {
                     onTouchEnd={onGalleryTouchEnd}
                   >
                     <img
-                      src={allImages[galleryIndex]}
+                      src={resolveUrl(allImages[galleryIndex])}
                       alt={selectedProduct.name}
                       className="w-full h-full object-contain cursor-zoom-in"
                       onClick={() => openLightbox(galleryIndex)}
@@ -336,7 +336,7 @@ export default function CatalogPage() {
                         className={`flex-shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 transition-all ${i === galleryIndex ? "border-primary" : "border-transparent opacity-50 hover:opacity-80"}`}
                         data-testid={`button-catalog-thumb-img-${i}`}
                       >
-                        <img src={url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
+                        <img src={resolveUrl(url)} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
                       </button>
                     ))}
                   </div>
@@ -433,7 +433,7 @@ export default function CatalogPage() {
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-16 h-16 rounded-md bg-background flex items-center justify-center overflow-hidden">
                     {buyProduct.imageUrl ? (
-                      <img src={buyProduct.imageUrl} alt={buyProduct.name} className="w-full h-full object-cover" />
+                      <img src={resolveUrl(buyProduct.imageUrl)} alt={buyProduct.name} className="w-full h-full object-cover" />
                     ) : (
                       <Package className="w-8 h-8 text-muted-foreground/40" />
                     )}
@@ -500,7 +500,7 @@ export default function CatalogPage() {
               <div className="bg-muted rounded-md p-3 flex items-center gap-3">
                 <div className="w-12 h-12 rounded-md bg-background flex items-center justify-center overflow-hidden flex-shrink-0">
                   {selectedProduct.imageUrl ? (
-                    <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-full h-full object-cover" />
+                    <img src={resolveUrl(selectedProduct.imageUrl)} alt={selectedProduct.name} className="w-full h-full object-cover" />
                   ) : (
                     <Package className="w-6 h-6 text-muted-foreground/40" />
                   )}

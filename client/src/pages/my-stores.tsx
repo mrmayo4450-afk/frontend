@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -95,7 +95,7 @@ function AddFromCatalogDialog({ storeId, storeName, onClose }: { storeId: string
           <div className="flex items-center gap-3">
             <div className="w-20 h-20 rounded-md bg-background flex items-center justify-center overflow-hidden flex-shrink-0">
               {selectedProduct.imageUrl ? (
-                <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-full h-full object-cover" />
+                <img src={resolveUrl(selectedProduct.imageUrl)} alt={selectedProduct.name} className="w-full h-full object-cover" />
               ) : (
                 <Package className="w-8 h-8 text-muted-foreground/40" />
               )}
@@ -215,7 +215,7 @@ function AddFromCatalogDialog({ storeId, storeName, onClose }: { storeId: string
                 <CardContent className="p-3">
                   <div className="aspect-square w-full bg-muted rounded-md flex items-center justify-center mb-2 overflow-hidden">
                     {product.imageUrl ? (
-                      <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                      <img src={resolveUrl(product.imageUrl)} alt={product.name} className="w-full h-full object-cover" />
                     ) : (
                       <BookOpen className="w-8 h-8 text-muted-foreground/20" />
                     )}
@@ -306,7 +306,7 @@ function StorePreviewDialog({ store, products, open, onOpenChange }: { store: St
                 <CardContent className="p-3">
                   <div className="aspect-square w-full bg-muted rounded-md flex items-center justify-center mb-3 overflow-hidden">
                     {p.imageUrl ? (
-                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                      <img src={resolveUrl(p.imageUrl)} alt={p.name} className="w-full h-full object-cover" />
                     ) : (
                       <Package className="w-10 h-10 text-muted-foreground/20" />
                     )}
@@ -332,7 +332,7 @@ function StorePreviewDialog({ store, products, open, onOpenChange }: { store: St
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                       {p.imageUrl ? (
-                        <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                        <img src={resolveUrl(p.imageUrl)} alt={p.name} className="w-full h-full object-cover" />
                       ) : (
                         <Package className="w-6 h-6 text-muted-foreground/20" />
                       )}
@@ -720,7 +720,7 @@ function StoreCard({ store }: { store: StoreType }) {
                           <label className="text-sm font-medium mb-1.5 block">Product Image <span className="text-muted-foreground font-normal">(optional)</span></label>
                           {customImageUrl && (
                             <div className="w-full h-28 rounded-lg bg-muted overflow-hidden mb-2 relative">
-                              <img src={customImageUrl} alt="Product" className="w-full h-full object-cover" />
+                              <img src={resolveUrl(customImageUrl)} alt="Product" className="w-full h-full object-cover" />
                               <button type="button" onClick={() => setCustomImageUrl("")} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-black/70" data-testid="button-remove-custom-image">
                                 <X className="w-3 h-3" />
                               </button>
@@ -787,7 +787,7 @@ function StoreCard({ store }: { store: StoreType }) {
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     {p.imageUrl && (
                       <div className="w-8 h-8 rounded bg-background overflow-hidden flex-shrink-0">
-                        <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                        <img src={resolveUrl(p.imageUrl)} alt={p.name} className="w-full h-full object-cover" />
                       </div>
                     )}
                     <div className="min-w-0">

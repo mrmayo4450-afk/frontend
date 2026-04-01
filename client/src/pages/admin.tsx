@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1059,7 +1059,7 @@ function StoresTab() {
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-sm" data-testid={`text-pending-store-name-${store.id}`}>{store.name}</p>
                         <p className="text-xs text-muted-foreground">Owner: {owner?.username ?? "Unknown"}</p>
-                        {store.nicImageUrl && <img src={store.nicImageUrl} alt="NIC" className="w-full h-32 object-cover rounded-md border mt-2" data-testid={"img-nic-" + store.id} />}
+                        {store.nicImageUrl && <img src={resolveUrl(store.nicImageUrl)} alt="NIC" className="w-full h-32 object-cover rounded-md border mt-2" data-testid={"img-nic-" + store.id} />}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -1451,7 +1451,7 @@ function CatalogTab() {
       <label className="text-sm font-medium mb-1.5 block">Main Product Image</label>
       {currentUrl && (
         <div className="w-full h-32 rounded-lg bg-muted overflow-hidden mb-2">
-          <img src={currentUrl} alt="Product" className="w-full h-full object-cover" />
+          <img src={resolveUrl(currentUrl)} alt="Product" className="w-full h-full object-cover" />
         </div>
       )}
       <div className="flex gap-2">
@@ -1493,7 +1493,7 @@ function CatalogTab() {
           <div className="grid grid-cols-4 gap-2 mb-2">
             {imgs.map((url, i) => (
               <div key={i} className="relative aspect-square rounded-md bg-muted overflow-hidden group">
-                <img src={url} alt={`Gallery ${i + 1}`} className="w-full h-full object-cover" />
+                <img src={resolveUrl(url)} alt={`Gallery ${i + 1}`} className="w-full h-full object-cover" />
                 <button
                   type="button"
                   onClick={() => removeGalleryImage(i, galleryTarget)}
@@ -1782,7 +1782,7 @@ function CatalogTab() {
             <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
               <div className="w-14 h-14 rounded-md bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
                 {p.imageUrl ? (
-                  <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                  <img src={resolveUrl(p.imageUrl)} alt={p.name} className="w-full h-full object-cover" />
                 ) : (
                   <Package className="w-6 h-6 text-muted-foreground/40" />
                 )}
@@ -2587,7 +2587,7 @@ function ResetsTab() {
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">{new Date(request.createdAt).toLocaleString()}</p>
                   {request.nicImageUrl && (
-                    <img src={request.nicImageUrl} alt="NIC" className="w-full h-32 object-cover rounded-md border mt-2" data-testid={`img-reset-nic-${request.id}`} />
+                    <img src={resolveUrl(request.nicImageUrl)} alt="NIC" className="w-full h-32 object-cover rounded-md border mt-2" data-testid={`img-reset-nic-${request.id}`} />
                   )}
                 </div>
               </div>
@@ -3428,7 +3428,7 @@ function RecordsOrdersSection() {
                 <TableCell data-testid={`text-record-order-product-${order.id}`}>
                   <div className="flex items-center gap-2">
                     {product?.imageUrl && (
-                      <img src={product.imageUrl} alt={product.name} className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                      <img src={resolveUrl(product.imageUrl)} alt={product.name} className="w-8 h-8 rounded object-cover flex-shrink-0" />
                     )}
                     <span className="text-xs">{product?.name ?? "Product"}</span>
                   </div>
