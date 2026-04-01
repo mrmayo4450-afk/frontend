@@ -45,8 +45,8 @@ function AdminChat() {
   const { lastMessage } = useWS();
   const queryClient = useQueryClient();
   const { data: allUsers } = useQuery<Omit<User, "password">[]>({ queryKey: ["/api/users"] });
-  const { data: allMessages } = useQuery<ChatMessage[]>({ queryKey: ["/api/chat/messages"] });
-  const { data: pinnedMsg } = useQuery<ChatMessage | null>({ queryKey: ["/api/chat/pinned"] });
+  const { data: allMessages } = useQuery<ChatMessage[]>({ queryKey: ["/api/chat/messages"], staleTime: 0, refetchInterval: 8000 });
+  const { data: pinnedMsg } = useQuery<ChatMessage | null>({ queryKey: ["/api/chat/pinned"], staleTime: 0 });
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [chatImage, setChatImage] = useState<File | null>(null);
@@ -344,8 +344,8 @@ function ClientChat() {
   const { user } = useAuth();
   const { lastMessage } = useWS();
   const queryClient = useQueryClient();
-  const { data: messages } = useQuery<ChatMessage[]>({ queryKey: ["/api/chat/messages"] });
-  const { data: pinnedMsg } = useQuery<ChatMessage | null>({ queryKey: ["/api/chat/pinned"] });
+  const { data: messages } = useQuery<ChatMessage[]>({ queryKey: ["/api/chat/messages"], staleTime: 0, refetchInterval: 8000 });
+  const { data: pinnedMsg } = useQuery<ChatMessage | null>({ queryKey: ["/api/chat/pinned"], staleTime: 0 });
   const [input, setInput] = useState("");
   const [chatImage, setChatImage] = useState<File | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);

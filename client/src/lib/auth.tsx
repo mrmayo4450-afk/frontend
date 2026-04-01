@@ -1,7 +1,28 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import type { User } from "@shared/schema";
+
+const USER_CACHE_KEY = "mn_user_v1";
+
+function getCachedUser(): Omit<User, "password"> | undefined {
+  try {
+    const raw = localStorage.getItem(USER_CACHE_KEY);
+    return raw ? JSON.parse(raw) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function setCachedUser(user: Omit<User, "password"> | null) {
+  try {
+    if (user) {
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(USER_CACHE_KEY);
+    }
+  } catch {}
+}
 
 interface AuthContextType {
   user: Omit<User, "password"> | null;
@@ -29,14 +50,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryFn: getQueryFn({ on401: "returnNull" }),
     retry: false,
     staleTime: 5 * 60 * 1000,
+    initialData: getCachedUser,
+    initialDataUpdatedAt: 0,
   });
+
+  useEffect(() => {
+    setCachedUser(user ?? null);
+  }, [user]);
 
   const loginMutation = useMutation({
     mutationFn: async (data: { email: string; password: string }) => {
       const res = await apiRequest("POST", "/api/auth/login", data);
       return res.json();
     },
-    onSuccess: (user) => queryClient.setQueryData(["/api/auth/me"], user),
+    onSuccess: (user) => {
+      setCachedUser(user);
+      queryClient.setQueryData(["/api/auth/me"], user);
+    },
   });
 
   const registerMutation = useMutation({
@@ -44,12 +74,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiRequest("POST", "/api/auth/register", data);
       return res.json();
     },
-    onSuccess: (user) => queryClient.setQueryData(["/api/auth/me"], user),
+    onSuccess: (user) => {
+      setCachedUser(user);
+      queryClient.setQueryData(["/api/auth/me"], user);
+    },
   });
 
   const logoutMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/auth/logout", {}),
     onSuccess: () => {
+      setCachedUser(null);
       queryClient.setQueryData(["/api/auth/me"], null);
       queryClient.clear();
     },
