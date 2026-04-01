@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /contact
+Allow: /privacy
+Allow: /terms
+Disallow: /api/
+Disallow: /admin
+Disallow: /account
+Disallow: /stores
+Disallow: /orders
+Disallow: /targets
+Disallow: /withdrawals
+Disallow: /notices
