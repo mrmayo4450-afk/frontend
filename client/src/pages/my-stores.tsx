@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { apiRequest, resolveUrl } from "@/lib/queryClient";
+import { apiRequest, resolveUrl, getStoredToken } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Store, Package, Trash2, ShoppingBag, Eye, Search, Filter, BookOpen, Star, Crown, ArrowUp, ArrowDown, LayoutGrid, List, X, Upload, BarChart3, TrendingUp, DollarSign, ShoppingCart, Pencil } from "lucide-react";
+import { Plus, Store, Package, Trash2, ShoppingBag, Eye, Search, Filter, BookOpen, Star, Crown, ArrowUp, ArrowDown, LayoutGrid, List, X, BarChart3, TrendingUp, DollarSign, ShoppingCart, Pencil } from "lucide-react";
 import type { Store as StoreType, Product, UserDailyStat } from "@shared/schema";
 
 const storeSchema = z.object({
@@ -26,18 +26,6 @@ const storeSchema = z.object({
 });
 
 type StoreForm = z.infer<typeof storeSchema>;
-
-const customProductSchema = z.object({
-  name: z.string().min(1, "Product name is required"),
-  description: z.string().min(1, "Description is required"),
-  price: z.string().min(1, "Price is required").refine(v => !isNaN(Number(v)) && Number(v) > 0, "Price must be a positive number"),
-  costPrice: z.string().optional().default("0"),
-  category: z.string().min(1, "Category is required"),
-  imageUrl: z.string().optional().default(""),
-  stock: z.string().min(1, "Stock is required").refine(v => !isNaN(Number(v)) && Number(v) >= 0, "Stock must be a non-negative number"),
-});
-
-type CustomProductForm = z.infer<typeof customProductSchema>;
 
 const storeCategories = ["Electronics", "Fashion", "Books", "Food & Beverage", "Sports", "Home & Garden", "Beauty", "Toys", "Automotive", "Other"];
 
@@ -56,6 +44,7 @@ function AddFromCatalogDialog({ storeId, storeName, onClose }: { storeId: string
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [resellPrice, setResellPrice] = useState("");
   const [quantity, setQuantity] = useState(1);
 
   const { data: catalogProducts, isLoading } = useQuery<Product[]>({ queryKey: ["/api/products/admin-catalog"] });
@@ -365,56 +354,7 @@ function StoreCard({ store }: { store: StoreType }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [addingProduct, setAddingProduct] = useState(false);
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [customImageUrl, setCustomImageUrl] = useState("");
-  const [uploadingCustomImage, setUploadingCustomImage] = useState(false);
-
-  const { data: currentUser } = useQuery<any>({ queryKey: ["/api/auth/me"] });
-  const isAdminRole = currentUser?.role === "admin" || currentUser?.role === "superadmin";
-
-  const handleCustomImageUpload = async (file: File) => {
-    setUploadingCustomImage(true);
-    try {
-      const formData = new FormData();
-      formData.append("image", file);
-      const response = await fetch("/api/upload", { method: "POST", body: formData, credentials: "include" });
-      if (!response.ok) throw new Error("Upload failed");
-      const data = await response.json();
-      setCustomImageUrl(data.imageUrl);
-    } catch (err: any) {
-      toast({ title: "Image upload failed", description: err.message, variant: "destructive" });
-    } finally {
-      setUploadingCustomImage(false);
-    }
-  };
-
-  const uploadForm = useForm<CustomProductForm>({
-    resolver: zodResolver(customProductSchema),
-    defaultValues: { name: "", description: "", price: "", costPrice: "0", category: "", imageUrl: "", stock: "10" },
-  });
-
-  const uploadMutation = useMutation({
-    mutationFn: (data: CustomProductForm) => apiRequest("POST", "/api/products/custom", {
-      name: data.name,
-      description: data.description,
-      price: data.price,
-      costPrice: data.costPrice || "0",
-      category: data.category,
-      imageUrl: customImageUrl || "",
-      stock: parseInt(data.stock),
-      storeId: store.id,
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/stores", store.id, "products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      toast({ title: "Product uploaded successfully" });
-      setUploadOpen(false);
-      setCustomImageUrl("");
-      uploadForm.reset();
-    },
-    onError: (err: any) => toast({ title: "Failed", description: err.message || "Only merchants can upload custom products", variant: "destructive" }),
-  });
 
   const [editDescOpen, setEditDescOpen] = useState(false);
   const [editDesc, setEditDesc] = useState(store.description ?? "");
@@ -431,7 +371,13 @@ function StoreCard({ store }: { store: StoreType }) {
 
   const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
     queryKey: ["/api/stores", store.id, "products"],
-    queryFn: () => fetch(`/api/stores/${store.id}/products`).then(r => r.json()),
+    queryFn: () => {
+      const token = getStoredToken();
+      return fetch(resolveUrl(`/api/stores/${store.id}/products`), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+      }).then(r => r.json());
+    },
   });
 
   const { data: dailyStats } = useQuery<UserDailyStat[]>({
@@ -657,101 +603,6 @@ function StoreCard({ store }: { store: StoreType }) {
               Products ({products?.length ?? 0})
             </h4>
             <div className="flex items-center gap-2">
-              {isAdminRole && (
-                <Dialog open={uploadOpen} onOpenChange={o => { setUploadOpen(o); if (!o) { setCustomImageUrl(""); uploadForm.reset(); } }}>
-                  <DialogTrigger asChild>
-                    <Button size="sm" variant="outline" disabled={!store.isApproved} data-testid="button-upload-product">
-                      <Upload className="w-4 h-4 mr-1" />
-                      Upload Product
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[85vh] overflow-y-auto">
-                    <DialogHeader>
-                      <DialogTitle>Upload Custom Product</DialogTitle>
-                      <DialogDescription>Add your own product to {store.name}</DialogDescription>
-                    </DialogHeader>
-                    <Form {...uploadForm}>
-                      <form onSubmit={uploadForm.handleSubmit(d => uploadMutation.mutate(d))} className="space-y-4">
-                        <FormField control={uploadForm.control} name="name" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Product Name</FormLabel>
-                            <FormControl><Input placeholder="Enter product name" data-testid="input-custom-product-name" {...field} /></FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={uploadForm.control} name="description" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Description</FormLabel>
-                            <FormControl><Textarea placeholder="Describe your product..." data-testid="input-custom-product-description" {...field} /></FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <div className="grid grid-cols-2 gap-4">
-                          <FormField control={uploadForm.control} name="price" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Price ($)</FormLabel>
-                              <FormControl><Input type="number" step="0.01" placeholder="0.00" data-testid="input-custom-product-price" {...field} /></FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )} />
-                          <FormField control={uploadForm.control} name="costPrice" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Cost Price ($)</FormLabel>
-                              <FormControl><Input type="number" step="0.01" placeholder="0.00" data-testid="input-custom-product-cost-price" {...field} /></FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )} />
-                        </div>
-                        <FormField control={uploadForm.control} name="category" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Category</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger data-testid="select-custom-product-category"><SelectValue placeholder="Select a category" /></SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {storeCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <div>
-                          <label className="text-sm font-medium mb-1.5 block">Product Image <span className="text-muted-foreground font-normal">(optional)</span></label>
-                          {customImageUrl && (
-                            <div className="w-full h-28 rounded-lg bg-muted overflow-hidden mb-2 relative">
-                              <img src={resolveUrl(customImageUrl)} alt="Product" className="w-full h-full object-cover" />
-                              <button type="button" onClick={() => setCustomImageUrl("")} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-black/70" data-testid="button-remove-custom-image">
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          )}
-                          <label className="block w-full cursor-pointer">
-                            <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" data-testid="input-custom-product-image"
-                              onChange={e => { const f = e.target.files?.[0]; if (f) handleCustomImageUpload(f); }} />
-                            <Button type="button" variant="outline" className="w-full pointer-events-none" disabled={uploadingCustomImage} asChild>
-                              <span data-testid="button-upload-custom-image">
-                                <Upload className="w-4 h-4 mr-2" />
-                                {uploadingCustomImage ? "Uploading..." : customImageUrl ? "Change Image" : "Upload Image from Device"}
-                              </span>
-                            </Button>
-                          </label>
-                        </div>
-                        <FormField control={uploadForm.control} name="stock" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Stock</FormLabel>
-                            <FormControl><Input type="number" placeholder="10" data-testid="input-custom-product-stock" {...field} /></FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                        <Button type="submit" className="w-full" disabled={uploadMutation.isPending || uploadingCustomImage} data-testid="button-submit-custom-product">
-                          {uploadingCustomImage ? "Uploading image..." : uploadMutation.isPending ? "Uploading..." : "Upload Product"}
-                        </Button>
-                      </form>
-                    </Form>
-                  </DialogContent>
-                </Dialog>
-              )}
               <Dialog open={addingProduct} onOpenChange={setAddingProduct}>
                 <DialogTrigger asChild>
                   <Button size="sm" variant="outline" disabled={!store.isApproved} data-testid={`button-add-product-store-${store.id}`}>
@@ -855,7 +706,8 @@ export default function MyStores() {
       if (!nicFile) throw new Error("NIC image is required");
       const formData = new FormData();
       formData.append("image", nicFile);
-      const uploadRes = await fetch("/api/upload/nic", { method: "POST", body: formData });
+      const nicUploadToken = getStoredToken();
+      const uploadRes = await fetch(resolveUrl("/api/upload/nic"), { method: "POST", body: formData, headers: nicUploadToken ? { Authorization: `Bearer ${nicUploadToken}` } : {} });
       if (!uploadRes.ok) throw new Error("Failed to upload NIC image");
       const { imageUrl } = await uploadRes.json();
       return apiRequest("POST", "/api/stores", { ...data, ownerId: user?.id, nicImageUrl: imageUrl, referenceCode: data.referenceCode });

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { apiRequest, resolveUrl } from "@/lib/queryClient";
+import { apiRequest, resolveUrl, getStoredToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1322,7 +1322,8 @@ function CatalogTab() {
     try {
       const formData = new FormData();
       formData.append("image", file);
-      const response = await fetch("/api/upload", { method: "POST", body: formData, credentials: "include" });
+      const token = getStoredToken();
+      const response = await fetch(resolveUrl("/api/upload"), { method: "POST", body: formData, credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!response.ok) throw new Error("Upload failed");
       const data = await response.json();
       if (target === "create") {
@@ -1350,7 +1351,8 @@ function CatalogTab() {
     try {
       const formData = new FormData();
       formData.append("image", file);
-      const response = await fetch("/api/upload", { method: "POST", body: formData, credentials: "include" });
+      const token2 = getStoredToken();
+      const response = await fetch(resolveUrl("/api/upload"), { method: "POST", body: formData, credentials: "include", headers: token2 ? { Authorization: `Bearer ${token2}` } : {} });
       if (!response.ok) throw new Error("Upload failed");
       const data = await response.json();
       if (target === "create") {
@@ -1606,7 +1608,8 @@ function CatalogTab() {
   const handleExportAll = async () => {
     setIsExporting(true);
     try {
-      const res = await fetch("/api/admin/products/export", { credentials: "include" });
+      const exportToken = getStoredToken();
+      const res = await fetch(resolveUrl("/api/admin/products/export"), { credentials: "include", headers: exportToken ? { Authorization: `Bearer ${exportToken}` } : {} });
       if (!res.ok) {
         let msg = "Export failed";
         try { const j = await res.json(); msg = j.message || msg; } catch {}
@@ -1635,7 +1638,8 @@ function CatalogTab() {
     try {
       const formData = new FormData();
       formData.append("file", importFile);
-      const response = await fetch("/api/admin/products/import", { method: "POST", body: formData, credentials: "include" });
+      const importToken = getStoredToken();
+      const response = await fetch(resolveUrl("/api/admin/products/import"), { method: "POST", body: formData, credentials: "include", headers: importToken ? { Authorization: `Bearer ${importToken}` } : {} });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Import failed");
       setImportResult({ created: data.created, errors: data.errors || [], imagesAttached: data.imagesAttached ?? 0 });
@@ -2959,7 +2963,8 @@ function BackupTab() {
   const handleTriggerSupabaseBackup = async () => {
     setIsTriggeringSupabase(true);
     try {
-      const res = await fetch("/api/admin/supabase-backup/trigger", { method: "POST", credentials: "include" });
+      const sbTriggerToken = getStoredToken();
+      const res = await fetch(resolveUrl("/api/admin/supabase-backup/trigger"), { method: "POST", credentials: "include", headers: sbTriggerToken ? { Authorization: `Bearer ${sbTriggerToken}` } : {} });
       if (!res.ok) throw new Error("Trigger failed");
       toast({ title: "Supabase Backup Scheduled", description: "Metadata snapshot + image snapshot are being saved to Supabase. This may take up to 20 seconds." });
       setTimeout(() => { refetchSupabase(); setIsTriggeringSupabase(false); }, 20000);
@@ -2971,7 +2976,8 @@ function BackupTab() {
 
   const handleDownloadSupabaseBackup = async (label: "current" | "previous" | "images") => {
     try {
-      const res = await fetch(`/api/admin/supabase-backup/download/${label}`, { credentials: "include" });
+      const sbDlToken = getStoredToken();
+      const res = await fetch(resolveUrl(`/api/admin/supabase-backup/download/${label}`), { credentials: "include", headers: sbDlToken ? { Authorization: `Bearer ${sbDlToken}` } : {} });
       if (!res.ok) throw new Error("Download failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -2989,7 +2995,8 @@ function BackupTab() {
   const handleDownloadBackup = async () => {
     setIsDownloading(true);
     try {
-      const res = await fetch("/api/admin/backup/download", { credentials: "include" });
+      const dlToken = getStoredToken();
+      const res = await fetch(resolveUrl("/api/admin/backup/download"), { credentials: "include", headers: dlToken ? { Authorization: `Bearer ${dlToken}` } : {} });
       if (!res.ok) throw new Error("Download failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -3013,10 +3020,12 @@ function BackupTab() {
     try {
       const formData = new FormData();
       formData.append("backup", restoreFile);
-      const res = await fetch("/api/admin/backup/restore-file", {
+      const restoreToken = getStoredToken();
+      const res = await fetch(resolveUrl("/api/admin/backup/restore-file"), {
         method: "POST",
         body: formData,
         credentials: "include",
+        headers: restoreToken ? { Authorization: `Bearer ${restoreToken}` } : {},
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Restore failed");

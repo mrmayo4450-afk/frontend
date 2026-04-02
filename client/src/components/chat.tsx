@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest, resolveUrl } from "@/lib/queryClient";
+import { apiRequest, resolveUrl, getStoredToken } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { useWS } from "@/lib/websocket";
 import { useToast } from "@/hooks/use-toast";
@@ -91,7 +91,8 @@ function AdminChat() {
       if (chatImage) {
         const formData = new FormData();
         formData.append("image", chatImage);
-        const res = await fetch("/api/upload/nic", { method: "POST", body: formData, credentials: "include" });
+        const nicToken = getStoredToken();
+        const res = await fetch(resolveUrl("/api/upload/nic"), { method: "POST", body: formData, credentials: "include", headers: nicToken ? { Authorization: `Bearer ${nicToken}` } : {} });
         const data = await res.json();
         imageUrl = data.imageUrl;
       }
@@ -368,7 +369,8 @@ function ClientChat() {
       if (chatImage) {
         const formData = new FormData();
         formData.append("image", chatImage);
-        const res = await fetch("/api/upload/nic", { method: "POST", body: formData, credentials: "include" });
+        const nicToken2 = getStoredToken();
+        const res = await fetch(resolveUrl("/api/upload/nic"), { method: "POST", body: formData, credentials: "include", headers: nicToken2 ? { Authorization: `Bearer ${nicToken2}` } : {} });
         const data = await res.json();
         imageUrl = data.imageUrl;
       }

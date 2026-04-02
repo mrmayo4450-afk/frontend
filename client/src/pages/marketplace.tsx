@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -56,6 +57,7 @@ function ImageLightbox({ images, initialIndex, onClose }: { images: string[]; in
   return createPortal(
     <div
       className="fixed inset-0 z-[9999] bg-black flex flex-col select-none"
+      style={{ touchAction: "none" }}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       data-testid="lightbox-overlay"
@@ -253,19 +255,34 @@ export default function Marketplace() {
   };
 
   const [showLocationPopup, setShowLocationPopup] = useState(false);
+  const [shipPhase, setShipPhase] = useState<"form" | "result">("form");
+  const [shipAddr, setShipAddr] = useState({ name: "", address: "", city: "", state: "", country: "", phone: "" });
 
   const handleBuyFromDetail = () => {
     if (!user) { toast({ title: "Sign in required", variant: "destructive" }); return; }
     if (user.isFrozen) { toast({ title: "Account frozen", variant: "destructive" }); return; }
     setSelectedProduct(null);
+    setShipPhase("form");
+    setShipAddr({ name: "", address: "", city: "", state: "", country: "", phone: "" });
     setShowLocationPopup(true);
+  };
+
+  const handleShipSubmit = () => {
+    const { name, address, city, state, country, phone } = shipAddr;
+    if (!name || !address || !city || !state || !country || !phone) {
+      toast({ title: "Please fill in all fields", variant: "destructive" });
+      return;
+    }
+    setShipPhase("result");
   };
 
   const openChat = () => {
     setShowLocationPopup(false);
     setSelectedProduct(null);
-    const chatBtn = document.querySelector('[data-testid="button-chat-toggle"]') as HTMLElement;
-    if (chatBtn) chatBtn.click();
+    setTimeout(() => {
+      const chatBtn = document.querySelector('[data-testid="button-chat-toggle"]') as HTMLElement;
+      if (chatBtn) chatBtn.click();
+    }, 300);
   };
 
   const totalCost = buyingProduct ? parseFloat(buyingProduct.price) * quantity : 0;
@@ -351,7 +368,7 @@ export default function Marketplace() {
                 {allImages.length > 0 ? (
                   <div
                     className="relative bg-gray-50 dark:bg-gray-900 overflow-hidden"
-                    style={{ aspectRatio: "4/3" }}
+                    style={{ aspectRatio: "4/3", touchAction: "none" }}
                     onTouchStart={onGalleryTouchStart}
                     onTouchEnd={onGalleryTouchEnd}
                   >
@@ -500,32 +517,73 @@ export default function Marketplace() {
         />
       )}
 
-      <Dialog open={showLocationPopup} onOpenChange={(open) => { if (!open) setShowLocationPopup(false); }}>
-        <DialogContent className="max-w-[95vw] sm:max-w-sm" data-testid="dialog-location-unavailable">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-destructive" />
-              Location Unavailable
-            </DialogTitle>
-            <DialogDescription>
-              This service is not available in your country. Please change your location to continue.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
-            <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
-            <p className="text-sm text-amber-700 dark:text-amber-400" data-testid="text-location-message">
-              Shipping to your current location is not supported. Contact our support team to update your delivery address.
-            </p>
-          </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setShowLocationPopup(false)} data-testid="button-location-cancel">
-              Cancel
-            </Button>
-            <Button className="w-full sm:w-auto" onClick={openChat} data-testid="button-change-location">
-              <MessageCircle className="w-4 h-4 mr-2" />
-              Change Location
-            </Button>
-          </DialogFooter>
+      <Dialog open={showLocationPopup} onOpenChange={(open) => { if (!open) { setShowLocationPopup(false); setShipPhase("form"); setShipAddr({ name: "", address: "", city: "", state: "", country: "", phone: "" }); } }}>
+        <DialogContent className="max-w-[95vw] sm:max-w-md" data-testid="dialog-location-unavailable">
+          {shipPhase === "form" ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Truck className="w-5 h-5" />
+                  Ship to Home
+                </DialogTitle>
+                <DialogDescription>Enter your delivery address to check availability in your area</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="mship-name">Full Name</Label>
+                  <Input id="mship-name" placeholder="Your full name" value={shipAddr.name} onChange={e => setShipAddr(p => ({ ...p, name: e.target.value }))} data-testid="input-mship-name" className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="mship-address">Address</Label>
+                  <Input id="mship-address" placeholder="Street address" value={shipAddr.address} onChange={e => setShipAddr(p => ({ ...p, address: e.target.value }))} data-testid="input-mship-address" className="mt-1" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="mship-city">City</Label>
+                    <Input id="mship-city" placeholder="City" value={shipAddr.city} onChange={e => setShipAddr(p => ({ ...p, city: e.target.value }))} data-testid="input-mship-city" className="mt-1" />
+                  </div>
+                  <div>
+                    <Label htmlFor="mship-state">State / Province</Label>
+                    <Input id="mship-state" placeholder="State" value={shipAddr.state} onChange={e => setShipAddr(p => ({ ...p, state: e.target.value }))} data-testid="input-mship-state" className="mt-1" />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="mship-country">Country</Label>
+                  <Input id="mship-country" placeholder="Country" value={shipAddr.country} onChange={e => setShipAddr(p => ({ ...p, country: e.target.value }))} data-testid="input-mship-country" className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="mship-phone">Phone Number</Label>
+                  <Input id="mship-phone" placeholder="+1 (555) 000-0000" value={shipAddr.phone} onChange={e => setShipAddr(p => ({ ...p, phone: e.target.value }))} data-testid="input-mship-phone" className="mt-1" />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowLocationPopup(false)} data-testid="button-location-cancel">Cancel</Button>
+                <Button onClick={handleShipSubmit} data-testid="button-mship-submit">Check Availability</Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <MapPin className="w-5 h-5 text-amber-500" />
+                  Service Unavailable
+                </DialogTitle>
+              </DialogHeader>
+              <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-700 dark:text-amber-400" data-testid="text-location-message">
+                  This service is not available in your area. Please contact chat support to change your shipment location. Thanks.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setShowLocationPopup(false); setShipPhase("form"); }} data-testid="button-location-cancel">Close</Button>
+                <Button onClick={openChat} data-testid="button-change-location">
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Contact Support
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

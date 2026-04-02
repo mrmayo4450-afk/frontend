@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   User, ChevronRight, Wallet, Volume2, RotateCcw,
-  FileText, BarChart3, Users, LogOut, Crown, Star,
+  FileText, BarChart3, Users, LogOut, Crown, Star, DollarSign,
 } from "lucide-react";
 import type { Order, Withdrawal, Store as StoreType, MerchantNotice } from "@shared/schema";
 

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest, getQueryFn } from "@/lib/queryClient";
+import { apiRequest, getQueryFn, getStoredToken, setStoredToken, resolveUrl } from "@/lib/queryClient";
 import type { User } from "@shared/schema";
 
 const USER_CACHE_KEY = "mn_user_v1";
@@ -60,10 +60,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginMutation = useMutation({
     mutationFn: async (data: { email: string; password: string }) => {
-      const res = await apiRequest("POST", "/api/auth/login", data);
+      const res = await fetch(resolveUrl("/api/auth/login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = text;
+        try { msg = JSON.parse(text)?.message || text; } catch {}
+        throw new Error(msg);
+      }
       return res.json();
     },
-    onSuccess: (user) => {
+    onSuccess: (userData: any) => {
+      const { token, ...user } = userData;
+      if (token) setStoredToken(token);
       setCachedUser(user);
       queryClient.setQueryData(["/api/auth/me"], user);
     },
@@ -71,10 +84,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerMutation = useMutation({
     mutationFn: async (data: RegisterData) => {
-      const res = await apiRequest("POST", "/api/auth/register", data);
+      const res = await fetch(resolveUrl("/api/auth/register"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = text;
+        try { msg = JSON.parse(text)?.message || text; } catch {}
+        throw new Error(msg);
+      }
       return res.json();
     },
-    onSuccess: (user) => {
+    onSuccess: (userData: any) => {
+      const { token, ...user } = userData;
+      if (token) setStoredToken(token);
       setCachedUser(user);
       queryClient.setQueryData(["/api/auth/me"], user);
     },
@@ -83,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logoutMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/auth/logout", {}),
     onSuccess: () => {
+      setStoredToken(null);
       setCachedUser(null);
       queryClient.setQueryData(["/api/auth/me"], null);
       queryClient.clear();

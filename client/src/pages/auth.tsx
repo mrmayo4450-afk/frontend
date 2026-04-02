@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Store, ShoppingBag, Shield } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
+import { resolveUrl, getStoredToken } from "@/lib/queryClient";
 
 const loginSchema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -62,10 +63,15 @@ export default function AuthPage() {
     try {
       const formData = new FormData();
       formData.append("image", forgotNicFile);
-      const uploadRes = await fetch("/api/upload/nic", { method: "POST", body: formData });
+      const token = getStoredToken();
+      const uploadRes = await fetch(resolveUrl("/api/upload/nic"), {
+        method: "POST",
+        body: formData,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!uploadRes.ok) throw new Error("Failed to upload NIC image");
       const { imageUrl } = await uploadRes.json();
-      const res = await fetch("/api/auth/forgot-password", {
+      const res = await fetch(resolveUrl("/api/auth/forgot-password"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: forgotEmail, phone: forgotPhone, nicImageUrl: imageUrl }),

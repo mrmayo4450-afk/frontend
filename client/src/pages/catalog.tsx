@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { BookOpen, Package, Store, Wallet, AlertTriangle, Truck, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { BookOpen, Package, Store, Wallet, AlertTriangle, Truck, ChevronLeft, ChevronRight, X, MapPin, MessageCircle } from "lucide-react";
 import { ExpandableText } from "@/components/expandable-text";
 import type { Product, Store as StoreType, User } from "@shared/schema";
 
@@ -58,6 +58,7 @@ function ImageLightbox({ images, initialIndex, onClose }: { images: string[]; in
   return createPortal(
     <div
       className="fixed inset-0 z-[9999] bg-black flex flex-col select-none"
+      style={{ touchAction: "none" }}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       data-testid="lightbox-overlay"
@@ -127,8 +128,9 @@ export default function CatalogPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [buyProduct, setBuyProduct] = useState<Product | null>(null);
-  const [buyQuantity, setBuyQuantity] = useState(1);
+  const [shipOpen, setShipOpen] = useState(false);
+  const [shipSubmitted, setShipSubmitted] = useState(false);
+  const [shipAddr, setShipAddr] = useState({ name: "", address: "", city: "", state: "", country: "", phone: "" });
   const [addToStore, setAddToStore] = useState(false);
   const [addStoreId, setAddStoreId] = useState("");
   const [addResellPrice, setAddResellPrice] = useState("");
@@ -144,20 +146,24 @@ export default function CatalogPage() {
 
   const balance = parseFloat(currentUser?.balance || "0");
 
-  const orderMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/orders", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/orders/my"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/products/admin-catalog"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/targets/my"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      setBuyProduct(null);
-      setSelectedProduct(null);
-      setBuyQuantity(1);
-      toast({ title: "Purchase successful!", description: "Your order has been placed." });
-    },
-    onError: (err: any) => toast({ title: "Order failed", description: err.message, variant: "destructive" }),
-  });
+  const handleShipSubmit = () => {
+    const { name, address, city, state, country, phone } = shipAddr;
+    if (!name || !address || !city || !state || !country || !phone) {
+      toast({ title: "Please fill in all fields", variant: "destructive" });
+      return;
+    }
+    setShipSubmitted(true);
+  };
+
+  const openSupportChat = () => {
+    setShipOpen(false);
+    setShipSubmitted(false);
+    setShipAddr({ name: "", address: "", city: "", state: "", country: "", phone: "" });
+    setTimeout(() => {
+      const chatBtn = document.querySelector('[data-testid="button-chat-toggle"]') as HTMLElement;
+      if (chatBtn) chatBtn.click();
+    }, 300);
+  };
 
   const addToStoreMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/products/resell", data),
@@ -184,9 +190,6 @@ export default function CatalogPage() {
       </div>
     );
   }
-
-  const totalCost = buyProduct ? parseFloat(buyProduct.price) * buyQuantity : 0;
-  const insufficientBalance = totalCost > balance;
 
   return (
     <div className="p-3 sm:p-6 max-w-7xl mx-auto">
@@ -253,7 +256,7 @@ export default function CatalogPage() {
         </div>
       )}
 
-      <Dialog open={!!selectedProduct && !buyProduct} onOpenChange={(open) => { if (!open) { setSelectedProduct(null); setGalleryIndex(0); } }}>
+      <Dialog open={!!selectedProduct && !shipOpen} onOpenChange={(open) => { if (!open) { setSelectedProduct(null); setGalleryIndex(0); } }}>
         <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto p-0" data-testid="dialog-catalog-detail">
           <VisuallyHidden><DialogTitle>Product Details</DialogTitle></VisuallyHidden>
           {selectedProduct && (() => {
@@ -275,7 +278,7 @@ export default function CatalogPage() {
             return (
               <div>
                 {allImages.length > 0 ? (
-                  <div className="relative bg-gray-50 dark:bg-gray-900 overflow-hidden" style={{ aspectRatio: "4/3" }}
+                  <div className="relative bg-gray-50 dark:bg-gray-900 overflow-hidden" style={{ aspectRatio: "4/3", touchAction: "none" }}
                     onTouchStart={onGalleryTouchStart}
                     onTouchEnd={onGalleryTouchEnd}
                   >
@@ -379,7 +382,7 @@ export default function CatalogPage() {
                       className="flex-1"
                       onClick={() => {
                         if (!user) { toast({ title: "Sign in required", variant: "destructive" }); return; }
-                        setBuyProduct(selectedProduct);
+                        setShipOpen(true);
                       }}
                       disabled={selectedProduct.stock === 0 || !user}
                       data-testid="button-catalog-detail-buy"
@@ -421,68 +424,73 @@ export default function CatalogPage() {
         />
       )}
 
-      <Dialog open={!!buyProduct} onOpenChange={() => { setBuyProduct(null); setBuyQuantity(1); }}>
-        <DialogContent className="max-w-[95vw] sm:max-w-lg" data-testid="dialog-buy-catalog">
-          <DialogHeader>
-            <DialogTitle>Buy from Catalog</DialogTitle>
-            <DialogDescription>Purchase {buyProduct?.name} from the official catalog</DialogDescription>
-          </DialogHeader>
-          {buyProduct && (
-            <div className="space-y-4">
-              <div className="bg-muted rounded-md p-4 space-y-2">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-16 h-16 rounded-md bg-background flex items-center justify-center overflow-hidden">
-                    {buyProduct.imageUrl ? (
-                      <img src={resolveUrl(buyProduct.imageUrl)} alt={buyProduct.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <Package className="w-8 h-8 text-muted-foreground/40" />
-                    )}
+      <Dialog open={shipOpen} onOpenChange={(o) => { if (!o) { setShipOpen(false); setShipSubmitted(false); setShipAddr({ name: "", address: "", city: "", state: "", country: "", phone: "" }); } }}>
+        <DialogContent className="max-w-[95vw] sm:max-w-md" data-testid="dialog-ship-home">
+          {!shipSubmitted ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Truck className="w-5 h-5" />
+                  Ship to Home
+                </DialogTitle>
+                <DialogDescription>Enter your delivery address to check availability in your area</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="ship-name">Full Name</Label>
+                  <Input id="ship-name" placeholder="Your full name" value={shipAddr.name} onChange={e => setShipAddr(p => ({ ...p, name: e.target.value }))} data-testid="input-ship-name" className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="ship-address">Address</Label>
+                  <Input id="ship-address" placeholder="Street address" value={shipAddr.address} onChange={e => setShipAddr(p => ({ ...p, address: e.target.value }))} data-testid="input-ship-address" className="mt-1" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="ship-city">City</Label>
+                    <Input id="ship-city" placeholder="City" value={shipAddr.city} onChange={e => setShipAddr(p => ({ ...p, city: e.target.value }))} data-testid="input-ship-city" className="mt-1" />
                   </div>
                   <div>
-                    <p className="font-medium text-sm">{buyProduct.name}</p>
-                    <p className="text-xs text-muted-foreground">${parseFloat(buyProduct.price).toFixed(2)} each</p>
+                    <Label htmlFor="ship-state">State / Province</Label>
+                    <Input id="ship-state" placeholder="State" value={shipAddr.state} onChange={e => setShipAddr(p => ({ ...p, state: e.target.value }))} data-testid="input-ship-state" className="mt-1" />
                   </div>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Quantity</span>
-                  <div className="flex items-center gap-2">
-                    <Button size="icon" variant="outline" onClick={() => setBuyQuantity(Math.max(1, buyQuantity - 1))} data-testid="button-catalog-qty-minus">-</Button>
-                    <span className="w-8 text-center font-medium" data-testid="text-catalog-quantity">{buyQuantity}</span>
-                    <Button size="icon" variant="outline" onClick={() => setBuyQuantity(Math.min(buyProduct.stock, buyQuantity + 1))} data-testid="button-catalog-qty-plus">+</Button>
-                  </div>
+                <div>
+                  <Label htmlFor="ship-country">Country</Label>
+                  <Input id="ship-country" placeholder="Country" value={shipAddr.country} onChange={e => setShipAddr(p => ({ ...p, country: e.target.value }))} data-testid="input-ship-country" className="mt-1" />
                 </div>
-                <div className="border-t pt-2 flex justify-between font-semibold">
-                  <span>Total</span>
-                  <span data-testid="text-catalog-total">${totalCost.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Your Balance</span>
-                  <span className={insufficientBalance ? "text-destructive font-medium" : "text-green-500 font-medium"} data-testid="text-catalog-buy-balance">
-                    ${balance.toFixed(2)}
-                  </span>
+                <div>
+                  <Label htmlFor="ship-phone">Phone Number</Label>
+                  <Input id="ship-phone" placeholder="+1 (555) 000-0000" value={shipAddr.phone} onChange={e => setShipAddr(p => ({ ...p, phone: e.target.value }))} data-testid="input-ship-phone" className="mt-1" />
                 </div>
               </div>
-              {insufficientBalance && (
-                <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-lg p-3" data-testid="text-catalog-insufficient-balance">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                  <span>Insufficient balance. Please recharge your account before purchasing.</span>
-                </div>
-              )}
-            </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShipOpen(false)} data-testid="button-ship-cancel">Cancel</Button>
+                <Button onClick={handleShipSubmit} data-testid="button-ship-submit">Check Availability</Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <MapPin className="w-5 h-5 text-amber-500" />
+                  Service Unavailable
+                </DialogTitle>
+              </DialogHeader>
+              <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-700 dark:text-amber-400" data-testid="text-ship-unavailable">
+                  This service is not available in your area. Please contact chat support to change your shipment location. Thanks.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setShipOpen(false); setShipSubmitted(false); }} data-testid="button-ship-close">Close</Button>
+                <Button onClick={openSupportChat} data-testid="button-ship-contact-support">
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Contact Support
+                </Button>
+              </DialogFooter>
+            </>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBuyProduct(null)}>Cancel</Button>
-            <Button
-              onClick={() => orderMutation.mutate({
-                productId: buyProduct?.id,
-                quantity: buyQuantity,
-              })}
-              disabled={orderMutation.isPending || insufficientBalance}
-              data-testid="button-confirm-catalog-purchase"
-            >
-              {orderMutation.isPending ? "Processing..." : "Confirm Purchase"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 

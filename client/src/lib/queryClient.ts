@@ -2,11 +2,36 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
+const JWT_STORAGE_KEY = "mn_jwt_v1";
+
+export function getStoredToken(): string | null {
+  try {
+    return localStorage.getItem(JWT_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredToken(token: string | null): void {
+  try {
+    if (token) {
+      localStorage.setItem(JWT_STORAGE_KEY, token);
+    } else {
+      localStorage.removeItem(JWT_STORAGE_KEY);
+    }
+  } catch {}
+}
+
 export function resolveUrl(url: string): string {
   if (API_BASE && url.startsWith("/")) {
     return `${API_BASE}${url}`;
   }
   return url;
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getStoredToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 async function throwIfResNotOk(res: Response) {
@@ -29,9 +54,13 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  const headers: Record<string, string> = {
+    ...authHeaders(),
+    ...(data ? { "Content-Type": "application/json" } : {}),
+  };
   const res = await fetch(resolveUrl(url), {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -48,6 +77,7 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const res = await fetch(resolveUrl(queryKey.join("/") as string), {
       credentials: "include",
+      headers: authHeaders(),
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
