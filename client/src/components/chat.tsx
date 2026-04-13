@@ -6,11 +6,12 @@ import { useWS } from "@/lib/websocket";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { MessageCircle, X, Send, Shield, ImageIcon, Search, Pin, PinOff } from "lucide-react";
+import { MessageCircle, X, Send, Shield, ImageIcon, Search, Pin, PinOff, Trash2 } from "lucide-react";
 import type { ChatMessage, User } from "@shared/schema";
 
 interface ChatWithUser extends ChatMessage {
@@ -22,19 +23,33 @@ function formatTime(date: Date | string) {
 }
 
 function PinnedBanner({ pinnedMsg, isAdmin, onUnpin }: { pinnedMsg: ChatMessage; isAdmin: boolean; onUnpin?: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = (pinnedMsg.content?.length ?? 0) > 60 || !!pinnedMsg.imageUrl;
   return (
-    <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 text-xs" data-testid="banner-pinned-message">
-      <Pin className="w-3 h-3 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-      <div className="flex-1 min-w-0">
-        <span className="font-semibold text-amber-700 dark:text-amber-300">Pinned: </span>
-        <span className="text-amber-800 dark:text-amber-200 truncate">
-          {pinnedMsg.imageUrl && !pinnedMsg.content ? "📷 Image" : (pinnedMsg.content?.length ?? 0) > 60 ? pinnedMsg.content!.slice(0, 60) + "…" : pinnedMsg.content}
-        </span>
+    <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 text-xs" data-testid="banner-pinned-message">
+      <div
+        className={`flex items-start gap-2 px-3 py-2 ${hasMore ? "cursor-pointer" : ""}`}
+        onClick={() => hasMore && setExpanded(e => !e)}
+        title={hasMore ? (expanded ? "Click to collapse" : "Click to see full message") : undefined}
+      >
+        <Pin className="w-3 h-3 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <span className="font-semibold text-amber-700 dark:text-amber-300">Pinned: </span>
+          <span className="text-amber-800 dark:text-amber-200 break-words">
+            {pinnedMsg.imageUrl && !pinnedMsg.content ? "📷 Image" : expanded ? pinnedMsg.content : (pinnedMsg.content?.length ?? 0) > 60 ? pinnedMsg.content!.slice(0, 60) + "…" : pinnedMsg.content}
+          </span>
+          {hasMore && <span className="ml-1 text-amber-500 font-medium">{expanded ? "▲" : "▼"}</span>}
+        </div>
+        {isAdmin && (
+          <button onClick={e => { e.stopPropagation(); onUnpin?.(); }} className="text-amber-500 hover:text-amber-700 flex-shrink-0" data-testid="button-unpin-message">
+            <X className="w-3 h-3" />
+          </button>
+        )}
       </div>
-      {isAdmin && (
-        <button onClick={onUnpin} className="text-amber-500 hover:text-amber-700 flex-shrink-0" data-testid="button-unpin-message">
-          <X className="w-3 h-3" />
-        </button>
+      {expanded && pinnedMsg.imageUrl && (
+        <div className="px-8 pb-2">
+          <img src={resolveUrl(pinnedMsg.imageUrl)} alt="Pinned image" className="max-w-[150px] rounded border cursor-pointer" onClick={() => window.open(resolveUrl(pinnedMsg.imageUrl!), '_blank')} />
+        </div>
       )}
     </div>
   );
@@ -118,6 +133,14 @@ function AdminChat() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/pinned"] });
       queryClient.invalidateQueries({ queryKey: ["/api/chat/messages"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/chat/messages/${id}`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/pinned"] });
     },
   });
 
@@ -266,17 +289,27 @@ function AdminChat() {
                     >
                       <div className="flex items-end gap-1">
                         {!isAdmin && isHovered && (
-                          <button
-                            onClick={() => msg.isPinned ? unpinMutation.mutate() : pinMutation.mutate(msg.id)}
-                            className="text-muted-foreground hover:text-amber-500 transition-colors mb-1 flex-shrink-0"
-                            data-testid={`button-pin-msg-${msg.id}`}
-                            title={msg.isPinned ? "Unpin message" : "Pin message"}
-                          >
-                            {msg.isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-                          </button>
+                          <div className="flex flex-col gap-0.5 mb-1">
+                            <button
+                              onClick={() => msg.isPinned ? unpinMutation.mutate() : pinMutation.mutate(msg.id)}
+                              className="text-muted-foreground hover:text-amber-500 transition-colors flex-shrink-0"
+                              data-testid={`button-pin-msg-${msg.id}`}
+                              title={msg.isPinned ? "Unpin message" : "Pin message"}
+                            >
+                              {msg.isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              onClick={() => deleteMutation.mutate(msg.id)}
+                              className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
+                              data-testid={`button-delete-msg-${msg.id}`}
+                              title="Delete message"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         )}
                         <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${isAdmin ? "bg-primary text-primary-foreground" : "bg-muted"} ${msg.isPinned ? "ring-1 ring-amber-400" : ""}`}>
-                          {msg.content && <p>{msg.content}</p>}
+                          {msg.content && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
                           {msg.imageUrl && (
                             <img src={resolveUrl(msg.imageUrl)} alt="Shared image" className="max-w-[200px] rounded-md border cursor-pointer mt-1" onClick={() => window.open(resolveUrl(msg.imageUrl!), '_blank')} data-testid="img-chat-message" />
                           )}
@@ -285,14 +318,24 @@ function AdminChat() {
                           </p>
                         </div>
                         {isAdmin && isHovered && (
-                          <button
-                            onClick={() => msg.isPinned ? unpinMutation.mutate() : pinMutation.mutate(msg.id)}
-                            className="text-muted-foreground hover:text-amber-500 transition-colors mb-1 flex-shrink-0"
-                            data-testid={`button-pin-msg-${msg.id}`}
-                            title={msg.isPinned ? "Unpin message" : "Pin message"}
-                          >
-                            {msg.isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-                          </button>
+                          <div className="flex flex-col gap-0.5 mb-1">
+                            <button
+                              onClick={() => msg.isPinned ? unpinMutation.mutate() : pinMutation.mutate(msg.id)}
+                              className="text-muted-foreground hover:text-amber-500 transition-colors flex-shrink-0"
+                              data-testid={`button-pin-msg-${msg.id}`}
+                              title={msg.isPinned ? "Unpin message" : "Pin message"}
+                            >
+                              {msg.isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              onClick={() => deleteMutation.mutate(msg.id)}
+                              className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
+                              data-testid={`button-delete-msg-${msg.id}`}
+                              title="Delete message"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -310,19 +353,31 @@ function AdminChat() {
                   </Button>
                 </div>
               )}
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Type a message..."
+              <div className="flex gap-2 items-end">
+                <Textarea
+                  placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
                   value={input}
                   onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && (input.trim() || chatImage)) sendMutation.mutate(); }}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (input.trim() || chatImage) sendMutation.mutate();
+                    }
+                  }}
+                  className="min-h-[36px] max-h-[160px] resize-none text-sm py-2"
+                  rows={1}
+                  onInput={e => {
+                    const el = e.currentTarget;
+                    el.style.height = "auto";
+                    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+                  }}
                   data-testid="input-admin-message"
                 />
                 <input type="file" accept="image/*" ref={imageInputRef} className="hidden" data-testid="input-chat-image" onChange={e => { if (e.target.files?.[0]) setChatImage(e.target.files[0]); }} />
-                <Button size="icon" variant="ghost" onClick={() => imageInputRef.current?.click()} data-testid="button-attach-image">
+                <Button size="icon" variant="ghost" onClick={() => imageInputRef.current?.click()} data-testid="button-attach-image" className="flex-shrink-0">
                   <ImageIcon className="w-4 h-4" />
                 </Button>
-                <Button size="icon" onClick={() => sendMutation.mutate()} disabled={(!input.trim() && !chatImage) || sendMutation.isPending} data-testid="button-admin-send">
+                <Button size="icon" onClick={() => sendMutation.mutate()} disabled={(!input.trim() && !chatImage) || sendMutation.isPending} data-testid="button-admin-send" className="flex-shrink-0">
                   <Send className="w-4 h-4" />
                 </Button>
               </div>
@@ -363,6 +418,8 @@ function ClientChat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null);
+
   const sendMutation = useMutation({
     mutationFn: async () => {
       let imageUrl: string | undefined;
@@ -383,6 +440,14 @@ function ClientChat() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/chat/messages/${id}`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/pinned"] });
+    },
+  });
+
   return (
     <div className="flex flex-col h-full">
       {pinnedMsg && (
@@ -392,22 +457,41 @@ function ClientChat() {
         <div className="space-y-3">
           {messages?.map(msg => {
             const isMe = msg.senderId === user?.id;
+            const isHovered = hoveredMsgId === msg.id;
             return (
-              <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`} data-testid={`msg-${msg.id}`}>
+              <div
+                key={msg.id}
+                className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+                data-testid={`msg-${msg.id}`}
+                onMouseEnter={() => setHoveredMsgId(msg.id)}
+                onMouseLeave={() => setHoveredMsgId(null)}
+              >
                 {!isMe && (
-                  <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center mr-2 flex-shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center mr-2 flex-shrink-0 mt-1">
                     <Shield className="w-4 h-4 text-primary-foreground" />
                   </div>
                 )}
-                <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${isMe ? "bg-primary text-primary-foreground" : "bg-muted"} ${msg.isPinned ? "ring-1 ring-amber-400" : ""}`}>
-                  {!isMe && <p className="text-xs font-semibold mb-1 text-primary">Admin</p>}
-                  {msg.content && <p>{msg.content}</p>}
-                  {msg.imageUrl && (
-                    <img src={resolveUrl(msg.imageUrl)} alt="Shared image" className="max-w-[200px] rounded-md border cursor-pointer mt-1" onClick={() => window.open(resolveUrl(msg.imageUrl!), '_blank')} data-testid="img-chat-message" />
+                <div className="flex items-end gap-1">
+                  <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${isMe ? "bg-primary text-primary-foreground" : "bg-muted"} ${msg.isPinned ? "ring-1 ring-amber-400" : ""}`}>
+                    {!isMe && <p className="text-xs font-semibold mb-1 text-primary">Admin</p>}
+                    {msg.content && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
+                    {msg.imageUrl && (
+                      <img src={resolveUrl(msg.imageUrl)} alt="Shared image" className="max-w-[200px] rounded-md border cursor-pointer mt-1" onClick={() => window.open(resolveUrl(msg.imageUrl!), '_blank')} data-testid="img-chat-message" />
+                    )}
+                    <p className={`text-xs mt-0.5 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+                      {formatTime(msg.createdAt)}{msg.isPinned && " 📌"}
+                    </p>
+                  </div>
+                  {isMe && isHovered && (
+                    <button
+                      onClick={() => deleteMutation.mutate(msg.id)}
+                      className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 mb-1"
+                      data-testid={`button-delete-msg-${msg.id}`}
+                      title="Delete message"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   )}
-                  <p className={`text-xs mt-0.5 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                    {formatTime(msg.createdAt)}{msg.isPinned && " 📌"}
-                  </p>
                 </div>
               </div>
             );
@@ -415,7 +499,7 @@ function ClientChat() {
           {(messages?.length ?? 0) === 0 && (
             <div className="text-center py-8">
               <Shield className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">Start a conversation with our admin team</p>
+              <p className="text-sm text-muted-foreground">Start a conversation with our support team</p>
             </div>
           )}
           <div ref={bottomRef} />
@@ -430,19 +514,31 @@ function ClientChat() {
             </Button>
           </div>
         )}
-        <div className="flex gap-2">
-          <Input
-            placeholder="Ask the admin anything..."
+        <div className="flex gap-2 items-end">
+          <Textarea
+            placeholder="Ask us anything… (Enter to send, Shift+Enter for new line)"
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && (input.trim() || chatImage)) sendMutation.mutate(); }}
+            onKeyDown={e => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (input.trim() || chatImage) sendMutation.mutate();
+              }
+            }}
+            className="min-h-[36px] max-h-[160px] resize-none text-sm py-2"
+            rows={1}
+            onInput={e => {
+              const el = e.currentTarget;
+              el.style.height = "auto";
+              el.style.height = Math.min(el.scrollHeight, 160) + "px";
+            }}
             data-testid="input-chat-message"
           />
           <input type="file" accept="image/*" ref={imageInputRef} className="hidden" data-testid="input-chat-image" onChange={e => { if (e.target.files?.[0]) setChatImage(e.target.files[0]); }} />
-          <Button size="icon" variant="ghost" onClick={() => imageInputRef.current?.click()} data-testid="button-attach-image">
+          <Button size="icon" variant="ghost" onClick={() => imageInputRef.current?.click()} data-testid="button-attach-image" className="flex-shrink-0">
             <ImageIcon className="w-4 h-4" />
           </Button>
-          <Button size="icon" onClick={() => sendMutation.mutate()} disabled={(!input.trim() && !chatImage) || sendMutation.isPending} data-testid="button-send-message">
+          <Button size="icon" onClick={() => sendMutation.mutate()} disabled={(!input.trim() && !chatImage) || sendMutation.isPending} data-testid="button-send-message" className="flex-shrink-0">
             <Send className="w-4 h-4" />
           </Button>
         </div>
@@ -571,7 +667,7 @@ export function ChatWidget() {
           <div className="flex items-center justify-between p-3 border-b">
             <div className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-primary" />
-              <span className="font-semibold text-sm">{isAdmin ? "Customer Support" : "Chat with Admin"}</span>
+              <span className="font-semibold text-sm">{isAdmin ? "Customer Support" : "Chat Support"}</span>
             </div>
             <Button size="icon" variant="ghost" onClick={() => setOpen(false)} data-testid="button-close-chat">
               <X className="w-4 h-4" />
