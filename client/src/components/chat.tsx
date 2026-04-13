@@ -287,56 +287,36 @@ function AdminChat() {
                       onMouseEnter={() => setHoveredMsgId(msg.id)}
                       onMouseLeave={() => setHoveredMsgId(null)}
                     >
-                      <div className="flex items-end gap-1">
-                        {!isAdmin && isHovered && (
-                          <div className="flex flex-col gap-0.5 mb-1">
+                      <div className="flex items-end gap-1.5 max-w-[92%]">
+                        {isHovered && (
+                          <div className="flex flex-col gap-1 mb-1 flex-shrink-0">
                             <button
                               onClick={() => msg.isPinned ? unpinMutation.mutate() : pinMutation.mutate(msg.id)}
-                              className="text-muted-foreground hover:text-amber-500 transition-colors flex-shrink-0"
+                              className="text-muted-foreground hover:text-amber-500 transition-colors"
                               data-testid={`button-pin-msg-${msg.id}`}
                               title={msg.isPinned ? "Unpin message" : "Pin message"}
                             >
-                              {msg.isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                              {msg.isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
                             </button>
                             <button
                               onClick={() => deleteMutation.mutate(msg.id)}
-                              className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
+                              className="text-muted-foreground hover:text-destructive transition-colors"
                               data-testid={`button-delete-msg-${msg.id}`}
                               title="Delete message"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         )}
-                        <div className={`max-w-[82%] rounded-lg px-3 py-2 text-sm ${isAdmin ? "bg-primary text-primary-foreground" : "bg-muted"} ${msg.isPinned ? "ring-1 ring-amber-400" : ""}`}>
+                        <div className={`min-w-0 rounded-lg px-3 py-2 text-sm ${isAdmin ? "bg-primary text-primary-foreground" : "bg-muted"} ${msg.isPinned ? "ring-1 ring-amber-400" : ""}`}>
                           {msg.content && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
                           {msg.imageUrl && (
-                            <img src={resolveUrl(msg.imageUrl)} alt="Shared image" className="max-w-[200px] rounded-md border cursor-pointer mt-1" onClick={() => window.open(resolveUrl(msg.imageUrl!), '_blank')} data-testid="img-chat-message" />
+                            <img src={resolveUrl(msg.imageUrl)} alt="Shared image" className="max-w-[240px] rounded-md border cursor-pointer mt-1" onClick={() => window.open(resolveUrl(msg.imageUrl!), '_blank')} data-testid="img-chat-message" />
                           )}
                           <p className={`text-xs mt-0.5 ${isAdmin ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                             {formatTime(msg.createdAt)}{msg.isPinned && " 📌"}
                           </p>
                         </div>
-                        {isAdmin && isHovered && (
-                          <div className="flex flex-col gap-0.5 mb-1">
-                            <button
-                              onClick={() => msg.isPinned ? unpinMutation.mutate() : pinMutation.mutate(msg.id)}
-                              className="text-muted-foreground hover:text-amber-500 transition-colors flex-shrink-0"
-                              data-testid={`button-pin-msg-${msg.id}`}
-                              title={msg.isPinned ? "Unpin message" : "Pin message"}
-                            >
-                              {msg.isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-                            </button>
-                            <button
-                              onClick={() => deleteMutation.mutate(msg.id)}
-                              className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
-                              data-testid={`button-delete-msg-${msg.id}`}
-                              title="Delete message"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
                       </div>
                     </div>
                   );
@@ -625,9 +605,9 @@ export function ChatWidget() {
   if (user.role !== "superadmin" && user.role !== "client") return null;
   const isAdmin = user.role === "superadmin";
 
-  const chatHeight = isAdmin ? 600 : 440;
+  const chatHeight = isAdmin ? 680 : 440;
   const chatWidth = isAdmin
-    ? (typeof window !== "undefined" && window.innerWidth < 768 ? Math.min(window.innerWidth - 16, 600) : 600)
+    ? (typeof window !== "undefined" && window.innerWidth < 768 ? Math.min(window.innerWidth - 16, 780) : 780)
     : (typeof window !== "undefined" && window.innerWidth < 768 ? Math.min(window.innerWidth - 16, 384) : 384);
 
   const panelStyle: React.CSSProperties = {};
