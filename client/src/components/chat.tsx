@@ -190,7 +190,7 @@ function AdminChat() {
 
   return (
     <div className="flex h-full">
-      <div className="w-48 border-r flex-shrink-0 flex flex-col">
+      <div className="w-64 border-r flex-shrink-0 flex flex-col">
         <div className="p-2 border-b">
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
@@ -605,40 +605,56 @@ export function ChatWidget() {
   if (user.role !== "superadmin" && user.role !== "client") return null;
   const isAdmin = user.role === "superadmin";
 
-  const chatHeight = isAdmin
-    ? (typeof window !== "undefined" ? Math.min(720, window.innerHeight - 80) : 720)
-    : 440;
-  const chatWidth = isAdmin
-    ? (typeof window !== "undefined" ? Math.min(960, window.innerWidth - 32) : 960)
-    : (typeof window !== "undefined" && window.innerWidth < 480 ? Math.min(window.innerWidth - 16, 384) : 384);
+  const chatWidth = typeof window !== "undefined" && window.innerWidth < 480
+    ? Math.min(window.innerWidth - 16, 384)
+    : 384;
+  const chatHeight = 440;
 
   const panelStyle: React.CSSProperties = {};
-  const btnCenterX = position.x + 28;
-  const btnCenterY = position.y + 28;
-  const spaceRight = window.innerWidth - btnCenterX;
-  const spaceBottom = window.innerHeight - position.y;
-  const spaceTop = position.y;
+  if (!isAdmin) {
+    const btnCenterX = position.x + 28;
+    const spaceRight = window.innerWidth - btnCenterX;
+    const spaceBottom = window.innerHeight - position.y;
+    const spaceTop = position.y;
 
-  if (spaceRight >= chatWidth / 2 + 28) {
-    panelStyle.left = Math.max(8, position.x + 56 + 8);
-  } else {
-    panelStyle.left = Math.max(8, position.x - chatWidth - 8);
+    if (spaceRight >= chatWidth / 2 + 28) {
+      panelStyle.left = Math.max(8, position.x + 56 + 8);
+    } else {
+      panelStyle.left = Math.max(8, position.x - chatWidth - 8);
+    }
+
+    if (spaceBottom >= chatHeight + 28) {
+      panelStyle.top = position.y;
+    } else if (spaceTop >= chatHeight) {
+      panelStyle.top = position.y + 56 - chatHeight;
+    } else {
+      panelStyle.top = Math.max(8, window.innerHeight - chatHeight - 8);
+    }
+
+    panelStyle.left = Math.max(8, Math.min(panelStyle.left as number, window.innerWidth - chatWidth - 8));
+    panelStyle.top = Math.max(8, Math.min(panelStyle.top as number, window.innerHeight - chatHeight - 8));
   }
-
-  if (spaceBottom >= chatHeight + 28) {
-    panelStyle.top = position.y;
-  } else if (spaceTop >= chatHeight) {
-    panelStyle.top = position.y + 56 - chatHeight;
-  } else {
-    panelStyle.top = Math.max(8, window.innerHeight - chatHeight - 8);
-  }
-
-  panelStyle.left = Math.max(8, Math.min(panelStyle.left as number, window.innerWidth - chatWidth - 8));
-  panelStyle.top = Math.max(8, Math.min(panelStyle.top as number, window.innerHeight - chatHeight - 8));
 
   return (
     <>
-      {open && (
+      {open && isAdmin && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-background" data-testid="chat-panel">
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-background shrink-0">
+            <div className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-primary" />
+              <span className="font-semibold">Customer Support</span>
+            </div>
+            <Button size="icon" variant="ghost" onClick={() => setOpen(false)} data-testid="button-close-chat">
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+          <div className="flex-1 min-h-0">
+            <AdminChat />
+          </div>
+        </div>
+      )}
+
+      {open && !isAdmin && (
         <Card
           className="fixed z-50 shadow-xl"
           style={{
@@ -651,14 +667,14 @@ export function ChatWidget() {
           <div className="flex items-center justify-between p-3 border-b">
             <div className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-primary" />
-              <span className="font-semibold text-sm">{isAdmin ? "Customer Support" : "Chat Support"}</span>
+              <span className="font-semibold text-sm">Chat Support</span>
             </div>
             <Button size="icon" variant="ghost" onClick={() => setOpen(false)} data-testid="button-close-chat">
               <X className="w-4 h-4" />
             </Button>
           </div>
           <div className="h-[calc(100%-53px)]">
-            {isAdmin ? <AdminChat /> : <ClientChat />}
+            <ClientChat />
           </div>
         </Card>
       )}
