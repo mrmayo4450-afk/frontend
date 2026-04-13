@@ -308,7 +308,7 @@ function AdminChat() {
                             </button>
                           </div>
                         )}
-                        <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${isAdmin ? "bg-primary text-primary-foreground" : "bg-muted"} ${msg.isPinned ? "ring-1 ring-amber-400" : ""}`}>
+                        <div className={`max-w-[82%] rounded-lg px-3 py-2 text-sm ${isAdmin ? "bg-primary text-primary-foreground" : "bg-muted"} ${msg.isPinned ? "ring-1 ring-amber-400" : ""}`}>
                           {msg.content && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
                           {msg.imageUrl && (
                             <img src={resolveUrl(msg.imageUrl)} alt="Shared image" className="max-w-[200px] rounded-md border cursor-pointer mt-1" onClick={() => window.open(resolveUrl(msg.imageUrl!), '_blank')} data-testid="img-chat-message" />
@@ -625,8 +625,10 @@ export function ChatWidget() {
   if (user.role !== "superadmin" && user.role !== "client") return null;
   const isAdmin = user.role === "superadmin";
 
-  const chatHeight = isAdmin ? 480 : 420;
-  const chatWidth = typeof window !== "undefined" && window.innerWidth < 768 ? Math.min(window.innerWidth - 16, 384) : 384;
+  const chatHeight = isAdmin ? 600 : 440;
+  const chatWidth = isAdmin
+    ? (typeof window !== "undefined" && window.innerWidth < 768 ? Math.min(window.innerWidth - 16, 600) : 600)
+    : (typeof window !== "undefined" && window.innerWidth < 768 ? Math.min(window.innerWidth - 16, 384) : 384);
 
   const panelStyle: React.CSSProperties = {};
   const btnCenterX = position.x + 28;
