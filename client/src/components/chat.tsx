@@ -274,8 +274,8 @@ function AdminChat() {
             {pinnedMsg && (
               <PinnedBanner pinnedMsg={pinnedMsg} isAdmin onUnpin={() => unpinMutation.mutate()} />
             )}
-            <ScrollArea className="flex-1 p-3">
-              <div className="space-y-3">
+            <ScrollArea className="flex-1 p-3 overflow-x-hidden">
+              <div className="space-y-3 overflow-x-hidden">
                 {conversation?.map(msg => {
                   const isAdmin = msg.senderId === user?.id;
                   const isHovered = hoveredMsgId === msg.id;
@@ -308,8 +308,8 @@ function AdminChat() {
                             </button>
                           </div>
                         )}
-                        <div className={`min-w-0 rounded-lg px-3 py-2 text-sm ${isAdmin ? "bg-primary text-primary-foreground" : "bg-muted"} ${msg.isPinned ? "ring-1 ring-amber-400" : ""}`}>
-                          {msg.content && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
+                        <div className={`min-w-0 overflow-hidden rounded-lg px-3 py-2 text-sm ${isAdmin ? "bg-primary text-primary-foreground" : "bg-muted"} ${msg.isPinned ? "ring-1 ring-amber-400" : ""}`}>
+                          {msg.content && <p className="whitespace-pre-wrap break-all">{msg.content}</p>}
                           {msg.imageUrl && (
                             <img src={resolveUrl(msg.imageUrl)} alt="Shared image" className="max-w-[240px] rounded-md border cursor-pointer mt-1" onClick={() => window.open(resolveUrl(msg.imageUrl!), '_blank')} data-testid="img-chat-message" />
                           )}
@@ -605,10 +605,12 @@ export function ChatWidget() {
   if (user.role !== "superadmin" && user.role !== "client") return null;
   const isAdmin = user.role === "superadmin";
 
-  const chatHeight = isAdmin ? 680 : 440;
+  const chatHeight = isAdmin
+    ? (typeof window !== "undefined" ? Math.min(720, window.innerHeight - 80) : 720)
+    : 440;
   const chatWidth = isAdmin
-    ? (typeof window !== "undefined" && window.innerWidth < 768 ? Math.min(window.innerWidth - 16, 780) : 780)
-    : (typeof window !== "undefined" && window.innerWidth < 768 ? Math.min(window.innerWidth - 16, 384) : 384);
+    ? (typeof window !== "undefined" ? Math.min(960, window.innerWidth - 32) : 960)
+    : (typeof window !== "undefined" && window.innerWidth < 480 ? Math.min(window.innerWidth - 16, 384) : 384);
 
   const panelStyle: React.CSSProperties = {};
   const btnCenterX = position.x + 28;
