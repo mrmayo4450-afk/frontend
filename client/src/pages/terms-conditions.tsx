@@ -41,9 +41,12 @@ Violation of these obligations may result in immediate account suspension and fo
 
 • Fraudulent listings, fake reviews, or misleading product representations.
 • Attempting to bypass our fee structure or payment system.
+• Skipping orders multiple times will result in reputational damage, if such behavior recurs, your account will be suspended.
+• All merchants must fulfill orders on time to receive positive reviews from customers.
 • Sharing account access with unauthorized individuals.
 • Interfering with the platform's technical infrastructure.
 • Engaging in money laundering, market manipulation, or any illegal financial activity.
+• Before withdrawing funds, please ensure that you maintain your account reputation. If your reputation is compromised due to negative feedback, the system will suspend your withdrawal functionality until your reputation returns to a normal level.
 • Harassment or abusive behavior toward other users or support staff.`,
     },
     {
