@@ -15,6 +15,7 @@ export default function TermsConditions() {
 • Maintaining the confidentiality of your account credentials.
 • All activities that occur under your account.
 • Ensuring that your account information is accurate and up to date.
+• All merchants must fulfill orders on time to receive positive reviews from customers.
 • Notifying us immediately of any unauthorized use of your account.
 
 MarketNest reserves the right to suspend or terminate accounts that violate these terms, engage in fraudulent activity, or misrepresent their identity.`,
@@ -26,6 +27,7 @@ MarketNest reserves the right to suspend or terminate accounts that violate thes
 • List only products they are authorized to sell.
 • Provide accurate descriptions, pricing, and images for all listings.
 • Fulfill orders promptly and maintain adequate stock levels.
+• Before withdrawing funds, please ensure that you maintain your account reputation. If your reputation is compromised due to negative feedback, the system will suspend your withdrawal functionality until your reputation returns to a normal level.
 • Adhere to all applicable local, national, and international laws governing their products.
 • Not list counterfeit, prohibited, or illegal items.
 
@@ -42,11 +44,9 @@ Violation of these obligations may result in immediate account suspension and fo
 • Fraudulent listings, fake reviews, or misleading product representations.
 • Attempting to bypass our fee structure or payment system.
 • Skipping orders multiple times will result in reputational damage, if such behavior recurs, your account will be suspended.
-• All merchants must fulfill orders on time to receive positive reviews from customers.
 • Sharing account access with unauthorized individuals.
 • Interfering with the platform's technical infrastructure.
 • Engaging in money laundering, market manipulation, or any illegal financial activity.
-• Before withdrawing funds, please ensure that you maintain your account reputation. If your reputation is compromised due to negative feedback, the system will suspend your withdrawal functionality until your reputation returns to a normal level.
 • Harassment or abusive behavior toward other users or support staff.`,
     },
     {
