@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,7 +21,7 @@ import {
   Shield, Users, ShoppingBag, Target, Snowflake, Plus, TrendingUp,
   Package, Store, Eye, Truck, BookOpen, Wallet, Bell, Pencil,
   Star, CreditCard, ThumbsUp, Phone, DollarSign, Trash2, Crown, KeyRound, Check, X,
-  UserPlus, Users2, ChevronDown, ChevronUp, BarChart3, BoxIcon, Key, ClipboardList, ChevronRight, Settings,
+  UserPlus, Users2, ChevronDown, ChevronUp, BarChart3, BoxIcon, Key, ClipboardList, ChevronLeft, ChevronRight, Settings,
   Download, Upload, Clock,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -167,6 +167,7 @@ function UserActivitySection({ userId }: { userId: string }) {
 
 function UsersTab() {
   const { toast } = useToast();
+  const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
   const { data: users, isLoading } = useQuery<Omit<User, "password">[]>({ queryKey: ["/api/users"] });
   const [editingUser, setEditingUser] = useState<string | null>(null);
@@ -218,9 +219,12 @@ function UsersTab() {
     mutationFn: (id: string) => apiRequest("DELETE", `/api/merchants/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      toast({ title: "Merchant removed from platform" });
+      queryClient.invalidateQueries({ queryKey: ["/api/stores"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bulk-orders"] });
+      toast({ title: "Merchant account and linked records permanently deleted" });
     },
-    onError: (err: any) => toast({ title: "Failed to remove merchant", description: err.message, variant: "destructive" }),
+    onError: (err: any) => toast({ title: "Failed to delete merchant", description: err.message, variant: "destructive" }),
   });
 
   const changePasswordMutation = useMutation({
@@ -419,11 +423,11 @@ function UsersTab() {
                   <Snowflake className="w-4 h-4 mr-1" />
                   {user.isFrozen ? "Unfreeze" : "Freeze"}
                 </Button>
-                <Button
+                {currentUser?.role === "superadmin" && <Button
                   size="sm"
                   variant="destructive"
                   onClick={() => {
-                    if (confirm(`Remove ${user.username} from the platform?`)) {
+                    if (confirm(`Permanently delete ${user.username}, their account, ALL their stores, orders and payment history? This cannot be undone, and they will lose access immediately.`)) {
                       removeMerchantMutation.mutate(user.id);
                     }
                   }}
@@ -431,8 +435,8 @@ function UsersTab() {
                   data-testid={`button-remove-merchant-${user.id}`}
                 >
                   <Trash2 className="w-4 h-4 mr-1" />
-                  Remove
-                </Button>
+                  Delete account
+                </Button>}
                 <Button
                   size="sm"
                   variant="outline"
@@ -948,9 +952,6 @@ function StoresTab() {
   const { user: currentUser } = useAuth();
   const isSuperAdmin = currentUser?.role === "superadmin";
   const { data: allStores, isLoading } = useQuery<StoreType[]>({ queryKey: ["/api/stores"] });
-  const { data: pendingNics } = useQuery<{ id: string; nicImageUrl: string | null }[]>({
-    queryKey: ["/api/admin/stores/pending-nics"],
-  });
   const { data: users } = useQuery<Omit<User, "password">[]>({ queryKey: ["/api/users"] });
   const { data: adminCatalog } = useQuery<Product[]>({ queryKey: ["/api/products/admin-catalog"] });
   const [editingStore, setEditingStore] = useState<string | null>(null);
@@ -961,10 +962,17 @@ function StoresTab() {
   const [goodRateValue, setGoodRateValue] = useState("");
   const [vipLevelValue, setVipLevelValue] = useState("");
   const [notesValue, setNotesValue] = useState("");
+  const [identityStoreId, setIdentityStoreId] = useState<string | null>(null);
+  const [identityPreviewStoreId, setIdentityPreviewStoreId] = useState<string | null>(null);
   const [stockDialogStoreId, setStockDialogStoreId] = useState<string | null>(null);
   const [stockProductId, setStockProductId] = useState("");
   const [stockQuantity, setStockQuantity] = useState("");
   const [stockPrice, setStockPrice] = useState("");
+
+  const identityDocumentMutation = useMutation({
+    mutationFn: async (storeId: string): Promise<{ id: string; nicImageUrl: string | null }> =>
+      (await apiRequest("GET", `/api/admin/stores/${storeId}/identity-document`)).json(),
+  });
 
   const stockMutation = useMutation({
     mutationFn: ({ storeId, data }: { storeId: string; data: { productId: string; quantity: number; resellPrice: number } }) =>
@@ -1010,7 +1018,6 @@ function StoresTab() {
     mutationFn: (id: string) => apiRequest("PATCH", "/api/stores/" + id + "/approve"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/stores"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/stores/pending-nics"] });
       toast({ title: "Store approved" });
     },
     onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
@@ -1020,11 +1027,31 @@ function StoresTab() {
     mutationFn: (id: string) => apiRequest("PATCH", "/api/stores/" + id + "/reject"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/stores"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/stores/pending-nics"] });
       toast({ title: "Store rejected" });
     },
     onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
+
+  const deleteStoreAccountMutation = useMutation({
+    mutationFn: (storeId: string) => apiRequest("DELETE", `/api/stores/${storeId}`),
+    onSuccess: () => {
+      setIdentityStoreId(null);
+      setIdentityPreviewStoreId(null);
+      identityDocumentMutation.reset();
+      queryClient.invalidateQueries({ queryKey: ["/api/stores"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bulk-orders"] });
+      toast({ title: "Store, merchant account and linked records permanently deleted" });
+    },
+    onError: (err: any) => toast({ title: "Failed to delete store and account", description: err.message, variant: "destructive" }),
+  });
+
+  const confirmDeleteStoreAccount = (store: StoreType) => {
+    if (window.confirm(`Permanently delete "${store.name}", its merchant account, ALL other stores owned by that merchant, and linked orders and payment history? This cannot be undone, and the merchant will lose access immediately.`)) {
+      deleteStoreAccountMutation.mutate(store.id);
+    }
+  };
 
   if (isLoading) return <div className="space-y-3">{Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}</div>;
 
@@ -1064,8 +1091,27 @@ function StoresTab() {
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-sm" data-testid={`text-pending-store-name-${store.id}`}>{store.name}</p>
                         <p className="text-xs text-muted-foreground">Owner: {owner?.username ?? "Unknown"}</p>
-                        {pendingNics?.find(nic => nic.id === store.id)?.nicImageUrl && (
-                          <img src={resolveUrl(pendingNics.find(nic => nic.id === store.id)!.nicImageUrl!)} alt="NIC" className="w-full h-32 object-cover rounded-md border mt-2" data-testid={"img-nic-" + store.id} />
+                        {isSuperAdmin && store.referenceCode && (
+                          <p className="mt-1 text-xs text-muted-foreground" data-testid={`text-store-reference-${store.id}`}>
+                            Submitted reference code: <span className="font-mono font-semibold text-foreground">{store.referenceCode}</span>
+                          </p>
+                        )}
+                        {isSuperAdmin && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-2"
+                            disabled={identityDocumentMutation.isPending}
+                            onClick={() => {
+                              setIdentityPreviewStoreId(null);
+                              setIdentityStoreId(store.id);
+                              identityDocumentMutation.reset();
+                              identityDocumentMutation.mutate(store.id);
+                            }}
+                            data-testid={`button-view-store-identity-${store.id}`}
+                          >
+                            {identityDocumentMutation.isPending ? "Loading submitted ID…" : "View submitted ID"}
+                          </Button>
                         )}
                       </div>
                     </div>
@@ -1096,6 +1142,9 @@ function StoresTab() {
                         <X className="w-4 h-4 mr-1" />
                         Reject
                       </Button>
+                      {isSuperAdmin && <Button size="sm" variant="destructive" onClick={() => confirmDeleteStoreAccount(store)} disabled={deleteStoreAccountMutation.isPending} data-testid={`button-delete-store-account-${store.id}`}>
+                        <Trash2 className="w-4 h-4 mr-1" /> Delete account
+                      </Button>}
                     </div>
                   </div>
                 </CardContent>
@@ -1110,13 +1159,19 @@ function StoresTab() {
         return (
           <Card key={store.id} data-testid={`card-admin-store-${store.id}`}>
             <CardContent className="p-4">
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+                <div className="flex items-center gap-4 min-w-0 lg:w-[300px] lg:flex-none">
                 <div className="w-10 h-10 rounded-md bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
                   <Store className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm" data-testid={`text-admin-store-name-${store.id}`}>{store.name}</p>
                   <p className="text-xs text-muted-foreground">Owner: {owner?.username ?? "Unknown"} • {store.category}</p>
+                   {isSuperAdmin && store.referenceCode && (
+                     <p className="mt-1 text-xs text-muted-foreground" data-testid={`text-store-reference-${store.id}`}>
+                       Submitted reference code: <span className="font-mono font-semibold text-foreground">{store.referenceCode}</span>
+                     </p>
+                   )}
                   <div className="flex flex-wrap gap-2 mt-1">
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" data-testid={`text-store-vip-${store.id}`}>VIP {owner?.vipLevel ?? 1}</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted" data-testid={`text-store-grade-${store.id}`}>Grade: {parseFloat(owner?.grade ?? "5").toFixed(1)}</span>
@@ -1126,7 +1181,52 @@ function StoresTab() {
                   </div>
                   {store.adminNotes && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Notes: {store.adminNotes}</p>}
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                </div>
+                {isSuperAdmin && (
+                  <div className="flex min-h-[80px] w-full flex-col justify-center rounded-lg border border-dashed bg-muted/20 px-3 py-2 lg:min-w-[240px] lg:max-w-[360px] lg:flex-1" data-testid={`box-store-identity-${store.id}`}>
+                    <p className="mb-1 text-[11px] font-medium text-muted-foreground">Customer ID card · private</p>
+                    {identityPreviewStoreId === store.id && identityDocumentMutation.isPending ? (
+                      <Skeleton className="h-12 w-full" />
+                    ) : identityPreviewStoreId === store.id && identityDocumentMutation.isError ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-destructive">Could not load ID card.</span>
+                        <Button size="sm" variant="outline" onClick={() => identityDocumentMutation.mutate(store.id)}>Retry</Button>
+                      </div>
+                    ) : identityPreviewStoreId === store.id && identityDocumentMutation.data?.nicImageUrl ? (
+                      <div className="flex items-center gap-3">
+                        <button type="button" className="rounded border bg-background p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setIdentityStoreId(store.id)} aria-label={`Enlarge ID card for ${owner?.username ?? store.name}`}>
+                          <img src={resolveUrl(identityDocumentMutation.data.nicImageUrl)} alt={`Submitted ID card for ${owner?.username ?? store.name}`} className="h-16 w-28 object-contain" data-testid={`img-store-identity-preview-${store.id}`} />
+                        </button>
+                        <div className="flex flex-col items-start gap-1">
+                          <Button size="sm" variant="ghost" className="h-auto p-0 text-xs underline" onClick={() => setIdentityStoreId(store.id)}>Open larger</Button>
+                          <Button size="sm" variant="ghost" className="h-auto p-0 text-xs text-muted-foreground" onClick={() => { setIdentityPreviewStoreId(null); identityDocumentMutation.reset(); }}>Hide ID</Button>
+                        </div>
+                      </div>
+                    ) : identityPreviewStoreId === store.id && identityDocumentMutation.data ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground">No ID card was submitted.</span>
+                        <Button size="sm" variant="ghost" onClick={() => { setIdentityPreviewStoreId(null); identityDocumentMutation.reset(); }}>Hide</Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 self-start"
+                        disabled={identityDocumentMutation.isPending}
+                        onClick={() => {
+                          setIdentityPreviewStoreId(store.id);
+                          identityDocumentMutation.reset();
+                          identityDocumentMutation.mutate(store.id);
+                        }}
+                        data-testid={`button-view-store-identity-${store.id}`}
+                      >
+                        <Eye className="mr-1.5 h-3.5 w-3.5" />
+                        View customer ID card
+                      </Button>
+                    )}
+                  </div>
+                )}
+                <div className="flex w-full flex-wrap items-center gap-2 lg:ml-auto lg:w-auto lg:flex-shrink-0 lg:justify-end">
                   <div className="flex items-center gap-1 text-sm text-muted-foreground">
                     <Eye className="w-4 h-4" />
                     <span data-testid={`text-visitors-${store.id}`}>{store.visitors}</span>
@@ -1151,6 +1251,9 @@ function StoresTab() {
                       Edit
                     </Button>
                   )}
+                  {isSuperAdmin && <Button size="sm" variant="destructive" onClick={() => confirmDeleteStoreAccount(store)} disabled={deleteStoreAccountMutation.isPending} data-testid={`button-delete-store-account-${store.id}`}>
+                    <Trash2 className="w-4 h-4 mr-1" /> Delete
+                  </Button>}
                 </div>
               </div>
               {editingStore === store.id && (
@@ -1219,6 +1322,44 @@ function StoresTab() {
           <p>No client stores yet</p>
         </div>
       )}
+
+      <Dialog open={!!identityStoreId} onOpenChange={(open) => {
+        if (!open) {
+          setIdentityStoreId(null);
+          if (!identityPreviewStoreId) identityDocumentMutation.reset();
+        }
+      }}>
+        <DialogContent className="max-w-[95vw] sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Submitted identity document</DialogTitle>
+          </DialogHeader>
+          {!isSuperAdmin ? (
+            <p className="text-sm text-muted-foreground">This document is restricted to superadmins.</p>
+          ) : identityDocumentMutation.isPending ? (
+            <Skeleton className="h-64 w-full" />
+          ) : identityDocumentMutation.isError ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              Could not load the submitted identity document. Close this dialog and try again.
+            </div>
+          ) : identityDocumentMutation.data?.nicImageUrl ? (
+            <div className="space-y-2">
+              <p className="break-all text-xs text-muted-foreground">Document reference ID: <span className="font-mono text-foreground">{identityDocumentMutation.data.id}</span></p>
+              <p className="text-xs text-muted-foreground">Private identity document for store owner account</p>
+              <img
+                src={resolveUrl(identityDocumentMutation.data.nicImageUrl)}
+                alt="Submitted identity document"
+                className="max-h-[70vh] w-full rounded-md border bg-muted object-contain"
+                data-testid="img-store-identity-document"
+              />
+            </div>
+          ) : (
+            <div className="space-y-2 rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+              {identityDocumentMutation.data?.id && <p className="break-all">Document reference ID: <span className="font-mono text-foreground">{identityDocumentMutation.data.id}</span></p>}
+              <p>No identity document is available for this store.</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!stockDialogStoreId} onOpenChange={(open) => { if (!open) setStockDialogStoreId(null); }}>
         <DialogContent>
@@ -1945,8 +2086,6 @@ function AdminOrderTab() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [editOrderId, setEditOrderId] = useState<string | null>(null);
-  const [editProfit, setEditProfit] = useState("");
-  const [editStatus, setEditStatus] = useState("");
   const [editNote, setEditNote] = useState("");
   const [editShipping, setEditShipping] = useState("");
   const [extendOrderId, setExtendOrderId] = useState<string | null>(null);
@@ -2026,8 +2165,6 @@ function AdminOrderTab() {
 
   const openEdit = (bo: BulkOrderWithItems) => {
     setEditOrderId(bo.id);
-    setEditProfit(bo.totalProfit);
-    setEditStatus(bo.status);
     setEditNote(bo.note ?? "");
     setEditShipping(bo.shippingAddress ?? "");
   };
@@ -2202,8 +2339,8 @@ function AdminOrderTab() {
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0 hidden sm:block">
-                      <p className="text-sm font-bold" data-testid={`text-bulk-cost-${bo.id}`}>${totalCostNum.toFixed(2)}</p>
-                      <p className="text-xs text-green-500">+${totalProfitNum.toFixed(2)}</p>
+                      <p className="text-sm font-bold" data-testid={`text-bulk-cost-${bo.id}`}>Cost ${totalCostNum.toFixed(2)}</p>
+                      <p className="text-xs text-emerald-700 dark:text-emerald-400">Net profit +${totalProfitNum.toFixed(2)}</p>
                     </div>
                     {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                   </button>
@@ -2227,11 +2364,14 @@ function AdminOrderTab() {
                       </div>
 
                       <div className="mt-3 pt-3 border-t space-y-2">
-                        <div className="grid grid-cols-3 gap-3 text-xs">
-                          <div><p className="text-muted-foreground">Total Cost</p><p className="font-medium">${totalCostNum.toFixed(2)}</p></div>
-                          <div><p className="text-muted-foreground">Total Profit</p><p className="font-bold text-green-500">+${totalProfitNum.toFixed(2)}</p></div>
-                          <div><p className="text-muted-foreground">Total Selling</p><p className="font-medium">${(totalCostNum + totalProfitNum).toFixed(2)}</p></div>
+                        <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
+                          <div><p className="text-muted-foreground">Cost · deducted at acceptance</p><p className="font-medium">${totalCostNum.toFixed(2)}</p></div>
+                          <div><p className="text-muted-foreground">Net profit</p><p className="font-bold text-emerald-700 dark:text-emerald-400">+${totalProfitNum.toFixed(2)}</p></div>
+                          <div><p className="text-muted-foreground">Selling amount · credited at completion</p><p className="font-medium">${(totalCostNum + totalProfitNum).toFixed(2)}</p></div>
                         </div>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          Acceptance deducts the cost from the merchant balance. Marking this order completed credits the full selling amount (${totalCostNum.toFixed(2)} cost + ${totalProfitNum.toFixed(2)} net profit).
+                        </p>
                         {bo.shippingAddress && <p className="text-xs text-muted-foreground"><span className="font-medium">Ship to:</span> {bo.shippingAddress}</p>}
                         {bo.note && <p className="text-xs text-muted-foreground italic"><span className="font-medium">Note:</span> {bo.note}</p>}
                         {bo.acceptedAt && <p className="text-xs text-muted-foreground"><span className="font-medium">Accepted:</span> {new Date(bo.acceptedAt).toLocaleString()}</p>}
@@ -2239,21 +2379,7 @@ function AdminOrderTab() {
                         {isEditing ? (
                           <div className="pt-2 space-y-3 border-t mt-2">
                             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Edit Bulk Order</p>
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="text-xs text-muted-foreground">Total Profit ($)</label>
-                                <Input type="number" step="0.01" min="0" value={editProfit} onChange={e => setEditProfit(e.target.value)} className="h-8 text-sm mt-0.5" data-testid={`input-edit-profit-${bo.id}`} />
-                              </div>
-                              <div>
-                                <label className="text-xs text-muted-foreground">Status</label>
-                                <Select value={editStatus} onValueChange={setEditStatus}>
-                                  <SelectTrigger className="h-8 text-sm mt-0.5" data-testid={`select-edit-status-${bo.id}`}><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    {["pending", "accepted", "declined", "expired", "completed"].map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
+                            <p className="text-xs text-muted-foreground">Financial totals are fixed for this batch. Cost, selling amount, and net profit are shown above.</p>
                             <div>
                               <label className="text-xs text-muted-foreground">Shipping Address</label>
                               <Input value={editShipping} onChange={e => setEditShipping(e.target.value)} className="h-8 text-sm mt-0.5" placeholder="Shipping address..." data-testid={`input-edit-shipping-${bo.id}`} />
@@ -2263,8 +2389,10 @@ function AdminOrderTab() {
                               <Input value={editNote} onChange={e => setEditNote(e.target.value)} className="h-8 text-sm mt-0.5" placeholder="Optional note..." data-testid={`input-edit-note-${bo.id}`} />
                             </div>
                             <div className="flex gap-2">
-                              <Button size="sm" className="h-8" onClick={() => updateMutation.mutate({ id: bo.id, data: { totalProfit: editProfit, status: editStatus, shippingAddress: editShipping, note: editNote } })} disabled={updateMutation.isPending} data-testid={`button-save-bulk-${bo.id}`}>
-                                <Check className="w-3 h-3 mr-1" /> Save Changes
+                              <Button size="sm" className="h-8" onClick={() => {
+                                updateMutation.mutate({ id: bo.id, data: { shippingAddress: editShipping, note: editNote } });
+                              }} disabled={updateMutation.isPending} data-testid={`button-save-bulk-${bo.id}`}>
+                                <Check className="w-3 h-3 mr-1" /> {updateMutation.isPending ? "Saving…" : "Save Changes"}
                               </Button>
                               <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditOrderId(null)} data-testid={`button-cancel-edit-${bo.id}`}>
                                 <X className="w-3 h-3 mr-1" /> Cancel
@@ -2282,7 +2410,7 @@ function AdminOrderTab() {
                             </div>
                             <div className="flex gap-1">
                               <Button size="sm" className="h-7 text-xs" onClick={() => { updateMutation.mutate({ id: bo.id, data: { extendHours: parseFloat(extendHours) } }); setExtendOrderId(null); }} disabled={updateMutation.isPending || !extendHours || parseFloat(extendHours) <= 0} data-testid={`button-save-extend-${bo.id}`}>
-                                <Check className="w-3 h-3 mr-1" /> Extend
+                                <Check className="w-3 h-3 mr-1" /> {updateMutation.isPending ? "Extending…" : "Extend"}
                               </Button>
                               <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setExtendOrderId(null)} data-testid={`button-cancel-extend-${bo.id}`}><X className="w-3 h-3" /></Button>
                             </div>
@@ -2298,8 +2426,12 @@ function AdminOrderTab() {
                               </Button>
                             )}
                             {bo.status === "accepted" && (
-                              <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white" onClick={() => updateMutation.mutate({ id: bo.id, data: { status: "completed" } })} disabled={updateMutation.isPending} data-testid={`button-complete-bulk-${bo.id}`}>
-                                <Check className="w-3 h-3 mr-1" /> Mark Completed
+                              <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white" onClick={() => {
+                                if (window.confirm(`Confirm marking batch ${bo.batchSn} completed? This will credit the merchant the full $${(totalCostNum + totalProfitNum).toFixed(2)} selling amount: $${totalCostNum.toFixed(2)} cost plus $${totalProfitNum.toFixed(2)} net profit.`)) {
+                                  updateMutation.mutate({ id: bo.id, data: { status: "completed" } });
+                                }
+                              }} disabled={updateMutation.isPending} data-testid={`button-complete-bulk-${bo.id}`}>
+                                <Check className="w-3 h-3 mr-1" /> {updateMutation.isPending ? "Completing…" : "Mark Completed"}
                               </Button>
                             )}
                           </div>
@@ -2556,13 +2688,19 @@ function NoticesTab() {
 function ResetsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
+  const [passwordCopied, setPasswordCopied] = useState(false);
   const { data: resets, isLoading } = useQuery<PasswordResetRequest[]>({ queryKey: ["/api/password-resets"] });
 
   const approveMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("PATCH", `/api/password-resets/${id}/approve`),
-    onSuccess: () => {
+    mutationFn: async (id: string): Promise<{ temporaryPassword: string }> => {
+      const response = await apiRequest("PATCH", `/api/password-resets/${id}/approve`);
+      return response.json();
+    },
+    onSuccess: ({ temporaryPassword: issuedPassword }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/password-resets"] });
-      toast({ title: "Password reset approved" });
+      setTemporaryPassword(issuedPassword);
+      setPasswordCopied(false);
     },
     onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
@@ -2575,6 +2713,22 @@ function ResetsTab() {
     },
     onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
+
+  const dismissTemporaryPassword = () => {
+    setTemporaryPassword(null);
+    setPasswordCopied(false);
+    approveMutation.reset();
+  };
+
+  const copyTemporaryPassword = async () => {
+    if (!temporaryPassword) return;
+    try {
+      await navigator.clipboard.writeText(temporaryPassword);
+      setPasswordCopied(true);
+    } catch {
+      toast({ title: "Unable to copy", description: "Select the password and copy it manually.", variant: "destructive" });
+    }
+  };
 
   if (isLoading) return <div className="space-y-3">{Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}</div>;
 
@@ -2618,7 +2772,7 @@ function ResetsTab() {
                     data-testid={`button-approve-reset-${request.id}`}
                   >
                     <Check className="w-4 h-4 mr-1" />
-                    Approve
+                    {approveMutation.isPending ? "Approving…" : "Approve"}
                   </Button>
                   <Button
                     size="sm"
@@ -2642,6 +2796,28 @@ function ResetsTab() {
           <p>No password reset requests</p>
         </div>
       )}
+      <Dialog open={!!temporaryPassword} onOpenChange={open => { if (!open) dismissTemporaryPassword(); }}>
+        <DialogContent className="max-w-[95vw] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>One-time temporary password</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+              Verify the requester’s identity first. Hand this password to the account owner privately through a trusted channel, then require them to change it immediately.
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">This credential is shown once. Keep it private.</p>
+              <code className="block select-all break-all rounded-md border bg-muted/50 px-3 py-3 font-mono text-sm" data-testid="text-reset-temporary-password">{temporaryPassword}</code>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-2">
+              <Button variant="outline" onClick={copyTemporaryPassword} data-testid="button-copy-reset-password">
+                {passwordCopied ? "Copied" : "Copy"}
+              </Button>
+              <Button onClick={dismissTemporaryPassword} data-testid="button-dismiss-reset-password">Dismiss</Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2697,7 +2873,12 @@ function AdminsTab() {
     mutationFn: (id: string) => apiRequest("DELETE", `/api/admins/${id}`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admins"] });
-      toast({ title: "Admin removed" });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stores"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bulk-orders"] });
+      setSelectedAdmin(null);
+      toast({ title: "Admin account, referral code and linked history permanently deleted" });
     },
     onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
@@ -2883,12 +3064,16 @@ function AdminsTab() {
                   <Button
                     size="sm"
                     variant="destructive"
-                    onClick={() => removeMutation.mutate(admin.id)}
+                    onClick={() => {
+                      if (window.confirm(`Permanently delete admin ${admin.username}, revoke their reference code, and erase records linked to them? Their referred merchants will keep their accounts but no longer be linked to this admin. This cannot be undone.`)) {
+                        removeMutation.mutate(admin.id);
+                      }
+                    }}
                     disabled={removeMutation.isPending}
                     data-testid={`button-remove-admin-${admin.id}`}
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
-                    Remove
+                    Delete admin
                   </Button>
                 </div>
               </div>
@@ -3615,6 +3800,204 @@ function RecordsNoticesSection() {
   );
 }
 
+export default function AdminPanel() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const isSuperAdmin = user?.role === "superadmin";
+  const { data: users } = useQuery<Omit<User, "password">[]>({ queryKey: ["/api/users"] });
+  const { data: orders } = useQuery<Order[]>({ queryKey: ["/api/orders"] });
+  const { data: stores } = useQuery<StoreType[]>({ queryKey: ["/api/stores"] });
+  const { data: targets } = useQuery<TargetType[]>({ queryKey: ["/api/targets"] });
+  const { data: allWithdrawals } = useQuery<Withdrawal[]>({ queryKey: ["/api/withdrawals"] });
+
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const tabListRef = useRef<HTMLDivElement>(null);
+  const [tabScroll, setTabScroll] = useState({ left: false, right: false });
+
+  const updateTabScroll = () => {
+    const list = tabListRef.current;
+    if (!list) return;
+    const left = list.scrollLeft > 2;
+    const right = list.scrollLeft + list.clientWidth < list.scrollWidth - 2;
+    setTabScroll(current => current.left === left && current.right === right ? current : { left, right });
+  };
+
+  useEffect(() => {
+    const list = tabListRef.current;
+    if (!list) return;
+    const observer = new ResizeObserver(updateTabScroll);
+    observer.observe(list);
+    const frame = requestAnimationFrame(updateTabScroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [isSuperAdmin]);
+
+  const scrollTabs = (direction: -1 | 1) => {
+    const list = tabListRef.current;
+    if (!list) return;
+    list.scrollBy({ left: direction * Math.max(200, list.clientWidth * 0.7), behavior: "smooth" });
+  };
+
+  const changePasswordMutation = useMutation({
+    mutationFn: (data: { currentPassword: string; newPassword: string }) =>
+      apiRequest("POST", "/api/admin/change-password", data),
+    onSuccess: () => {
+      toast({ title: "Password changed successfully" });
+      setProfileOpen(false);
+      setCurrentPw(""); setNewPw(""); setConfirmPw("");
+    },
+    onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
+  });
+
+  const handleChangePassword = () => {
+    if (!currentPw || !newPw) { toast({ title: "All fields required", variant: "destructive" }); return; }
+    if (newPw.length < 6) { toast({ title: "New password must be at least 6 characters", variant: "destructive" }); return; }
+    if (newPw !== confirmPw) { toast({ title: "Passwords don't match", variant: "destructive" }); return; }
+    changePasswordMutation.mutate({ currentPassword: currentPw, newPassword: newPw });
+  };
+
+  const clients = users?.filter(u => u.role === "client") ?? [];
+  const totalRevenue = orders?.reduce((sum, o) => sum + parseFloat(o.totalPrice), 0) ?? 0;
+  const pendingWithdrawals = allWithdrawals?.filter(w => w.status === "pending").length ?? 0;
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between gap-3 mb-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+            <Shield className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+            <p className="text-muted-foreground text-sm">Manage merchants, orders, withdrawals, and more</p>
+          </div>
+        </div>
+        <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" data-testid="button-admin-profile">
+              <Key className="w-4 h-4 mr-2" />
+              Change Password
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-[95vw] sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Change Password</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Current Password</label>
+                <Input type="password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} placeholder="Current password" data-testid="input-current-password" />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">New Password</label>
+                <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="New password (min 6 chars)" data-testid="input-new-password" />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Confirm New Password</label>
+                <Input type="password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} placeholder="Confirm new password" data-testid="input-confirm-password" />
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setProfileOpen(false)}>Cancel</Button>
+              <Button onClick={handleChangePassword} disabled={changePasswordMutation.isPending} data-testid="button-save-password">
+                {changePasswordMutation.isPending ? "Saving..." : "Save Password"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        <StatCard title="Total Clients" value={clients.length} icon={Users} color="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
+        <StatCard title="Total Orders" value={orders?.length ?? 0} icon={ShoppingBag} color="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" />
+        <StatCard title="Total Stores" value={stores?.length ?? 0} icon={Store} color="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" />
+        <StatCard title="Total Revenue" value={`$${totalRevenue.toFixed(0)}`} icon={TrendingUp} color="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" />
+        <StatCard title="Pending W/D" value={pendingWithdrawals} icon={Wallet} color="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
+      </div>
+
+      <Tabs defaultValue="users">
+        <div className="mb-4 flex min-w-0 items-center gap-1 sm:mb-6">
+          <Button type="button" size="icon" variant="outline" className="h-10 w-9 shrink-0" aria-label="Scroll admin tabs left" title="Previous tabs" disabled={!tabScroll.left} onClick={() => scrollTabs(-1)} data-testid="button-admin-tabs-left">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <TabsList ref={tabListRef} onScroll={updateTabScroll} aria-label="Admin sections" className="h-12 min-w-0 flex-1 flex-nowrap justify-start overflow-x-auto [&>button]:shrink-0">
+          <TabsTrigger value="users" data-testid="tab-admin-users">
+            <Users className="w-4 h-4 mr-2" />
+            Merchants
+          </TabsTrigger>
+          <TabsTrigger value="orders" data-testid="tab-admin-orders">
+            <ShoppingBag className="w-4 h-4 mr-2" />
+            Orders
+          </TabsTrigger>
+          <TabsTrigger value="targets" data-testid="tab-admin-targets">
+            <Target className="w-4 h-4 mr-2" />
+            Targets
+          </TabsTrigger>
+          <TabsTrigger value="stores" data-testid="tab-admin-stores">
+            <Store className="w-4 h-4 mr-2" />
+            Stores
+          </TabsTrigger>
+          <TabsTrigger value="catalog" data-testid="tab-admin-catalog">
+            <BookOpen className="w-4 h-4 mr-2" />
+            Catalog
+          </TabsTrigger>
+          <TabsTrigger value="delivery" data-testid="tab-admin-delivery">
+            <Truck className="w-4 h-4 mr-2" />
+            Delivery
+          </TabsTrigger>
+          <TabsTrigger value="withdrawals" data-testid="tab-admin-withdrawals">
+            <Wallet className="w-4 h-4 mr-2" />
+            Withdrawals
+          </TabsTrigger>
+          <TabsTrigger value="notices" data-testid="tab-admin-notices">
+            <Bell className="w-4 h-4 mr-2" />
+            Notices
+          </TabsTrigger>
+          {isSuperAdmin && <TabsTrigger value="resets" data-testid="tab-admin-resets">
+            <KeyRound className="w-4 h-4 mr-2" />
+            Resets
+          </TabsTrigger>}
+          <TabsTrigger value="records" data-testid="tab-admin-records">
+            <ClipboardList className="w-4 h-4 mr-2" />
+            Records
+          </TabsTrigger>
+          {isSuperAdmin && <TabsTrigger value="admins" data-testid="tab-admin-admins"><Shield className="w-4 h-4 mr-1" />Admins</TabsTrigger>}
+          {isSuperAdmin && <TabsTrigger value="backup" data-testid="tab-admin-backup"><BoxIcon className="w-4 h-4 mr-1" />Backup</TabsTrigger>}
+           <TabsTrigger value="reference-search" data-testid="tab-admin-reference-search"><Store className="w-4 h-4 mr-1" />Code Search</TabsTrigger>
+           {isSuperAdmin && <TabsTrigger value="admin-actions" data-testid="tab-admin-actions"><ClipboardList className="w-4 h-4 mr-1" />Admin’s actions</TabsTrigger>}
+          <TabsTrigger value="settings" data-testid="tab-admin-settings"><Settings className="w-4 h-4 mr-1" />Settings</TabsTrigger>
+          </TabsList>
+          <Button type="button" size="icon" variant="outline" className="h-10 w-9 shrink-0" aria-label="Scroll admin tabs right" title="More tabs" disabled={!tabScroll.right} onClick={() => scrollTabs(1)} data-testid="button-admin-tabs-right">
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <TabsContent value="users"><UsersTab /></TabsContent>
+        <TabsContent value="orders"><OrdersTab /></TabsContent>
+        <TabsContent value="targets"><TargetsTab /></TabsContent>
+        <TabsContent value="stores"><StoresTab /></TabsContent>
+        <TabsContent value="catalog"><CatalogTab /></TabsContent>
+        <TabsContent value="delivery"><AdminOrderTab /></TabsContent>
+        <TabsContent value="withdrawals"><WithdrawalsTab /></TabsContent>
+        <TabsContent value="notices"><NoticesTab /></TabsContent>
+        {isSuperAdmin && <TabsContent value="resets"><ResetsTab /></TabsContent>}
+        <TabsContent value="records"><RecordsTab /></TabsContent>
+        {isSuperAdmin && <TabsContent value="admins"><AdminsTab /></TabsContent>}
+        {isSuperAdmin && <TabsContent value="backup"><BackupTab /></TabsContent>}
+         <TabsContent value="reference-search"><AdminReferenceSearchTab /></TabsContent>
+         {isSuperAdmin && <TabsContent value="admin-actions"><AdminActionsTab /></TabsContent>}
+        <TabsContent value="settings"><SiteSettingsTab /></TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
 type ReferenceSearchResult = {
   administrator: { id: string; username: string; email: string; referenceCode: string; role: string };
   customers: { id: string; username: string; email: string; phone: string | null; storeId: string | null; storeName: string | null; storeReferenceCode: string | null; isApproved: boolean }[];
@@ -3755,168 +4138,6 @@ function AdminActionsTab() {
         );
       })}
       {!isLoading && !isError && (actions?.length ?? 0) === 0 && <div className="text-center py-12 text-muted-foreground"><ClipboardList className="w-10 h-10 mx-auto mb-2 opacity-30" /><p>No administrator actions found</p></div>}
-    </div>
-  );
-}
-
-export default function AdminPanel() {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const isSuperAdmin = user?.role === "superadmin";
-  const { data: users } = useQuery<Omit<User, "password">[]>({ queryKey: ["/api/users"] });
-  const { data: orders } = useQuery<Order[]>({ queryKey: ["/api/orders"] });
-  const { data: stores } = useQuery<StoreType[]>({ queryKey: ["/api/stores"] });
-  const { data: targets } = useQuery<TargetType[]>({ queryKey: ["/api/targets"] });
-  const { data: allWithdrawals } = useQuery<Withdrawal[]>({ queryKey: ["/api/withdrawals"] });
-
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [currentPw, setCurrentPw] = useState("");
-  const [newPw, setNewPw] = useState("");
-  const [confirmPw, setConfirmPw] = useState("");
-
-  const changePasswordMutation = useMutation({
-    mutationFn: (data: { currentPassword: string; newPassword: string }) =>
-      apiRequest("POST", "/api/admin/change-password", data),
-    onSuccess: () => {
-      toast({ title: "Password changed successfully" });
-      setProfileOpen(false);
-      setCurrentPw(""); setNewPw(""); setConfirmPw("");
-    },
-    onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
-  });
-
-  const handleChangePassword = () => {
-    if (!currentPw || !newPw) { toast({ title: "All fields required", variant: "destructive" }); return; }
-    if (newPw.length < 6) { toast({ title: "New password must be at least 6 characters", variant: "destructive" }); return; }
-    if (newPw !== confirmPw) { toast({ title: "Passwords don't match", variant: "destructive" }); return; }
-    changePasswordMutation.mutate({ currentPassword: currentPw, newPassword: newPw });
-  };
-
-  const clients = users?.filter(u => u.role === "client") ?? [];
-  const totalRevenue = orders?.reduce((sum, o) => sum + parseFloat(o.totalPrice), 0) ?? 0;
-  const pendingWithdrawals = allWithdrawals?.filter(w => w.status === "pending").length ?? 0;
-
-  return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between gap-3 mb-8">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-            <Shield className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-            <p className="text-muted-foreground text-sm">Manage merchants, orders, withdrawals, and more</p>
-          </div>
-        </div>
-        <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" data-testid="button-admin-profile">
-              <Key className="w-4 h-4 mr-2" />
-              Change Password
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-[95vw] sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Change Password</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Current Password</label>
-                <Input type="password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} placeholder="Current password" data-testid="input-current-password" />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">New Password</label>
-                <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="New password (min 6 chars)" data-testid="input-new-password" />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Confirm New Password</label>
-                <Input type="password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} placeholder="Confirm new password" data-testid="input-confirm-password" />
-              </div>
-            </div>
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setProfileOpen(false)}>Cancel</Button>
-              <Button onClick={handleChangePassword} disabled={changePasswordMutation.isPending} data-testid="button-save-password">
-                {changePasswordMutation.isPending ? "Saving..." : "Save Password"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <StatCard title="Total Clients" value={clients.length} icon={Users} color="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" />
-        <StatCard title="Total Orders" value={orders?.length ?? 0} icon={ShoppingBag} color="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" />
-        <StatCard title="Total Stores" value={stores?.length ?? 0} icon={Store} color="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" />
-        <StatCard title="Total Revenue" value={`$${totalRevenue.toFixed(0)}`} icon={TrendingUp} color="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" />
-        <StatCard title="Pending W/D" value={pendingWithdrawals} icon={Wallet} color="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
-      </div>
-
-      <Tabs defaultValue="users">
-        <TabsList className="mb-4 sm:mb-6 w-full overflow-x-auto flex flex-nowrap justify-start scrollbar-none">
-          <TabsTrigger value="users" data-testid="tab-admin-users">
-            <Users className="w-4 h-4 mr-2" />
-            Merchants
-          </TabsTrigger>
-          <TabsTrigger value="orders" data-testid="tab-admin-orders">
-            <ShoppingBag className="w-4 h-4 mr-2" />
-            Orders
-          </TabsTrigger>
-          <TabsTrigger value="targets" data-testid="tab-admin-targets">
-            <Target className="w-4 h-4 mr-2" />
-            Targets
-          </TabsTrigger>
-          <TabsTrigger value="stores" data-testid="tab-admin-stores">
-            <Store className="w-4 h-4 mr-2" />
-            Stores
-          </TabsTrigger>
-          <TabsTrigger value="catalog" data-testid="tab-admin-catalog">
-            <BookOpen className="w-4 h-4 mr-2" />
-            Catalog
-          </TabsTrigger>
-          <TabsTrigger value="delivery" data-testid="tab-admin-delivery">
-            <Truck className="w-4 h-4 mr-2" />
-            Delivery
-          </TabsTrigger>
-          <TabsTrigger value="withdrawals" data-testid="tab-admin-withdrawals">
-            <Wallet className="w-4 h-4 mr-2" />
-            Withdrawals
-          </TabsTrigger>
-          <TabsTrigger value="notices" data-testid="tab-admin-notices">
-            <Bell className="w-4 h-4 mr-2" />
-            Notices
-          </TabsTrigger>
-          <TabsTrigger value="resets" data-testid="tab-admin-resets">
-            <KeyRound className="w-4 h-4 mr-2" />
-            Resets
-          </TabsTrigger>
-          <TabsTrigger value="records" data-testid="tab-admin-records">
-            <ClipboardList className="w-4 h-4 mr-2" />
-            Records
-          </TabsTrigger>
-          <TabsTrigger value="reference-search" data-testid="tab-admin-reference-search"><Store className="w-4 h-4 mr-1" />Code Search</TabsTrigger>
-          {isSuperAdmin && <TabsTrigger value="admins" data-testid="tab-admin-admins"><Shield className="w-4 h-4 mr-1" />Admins</TabsTrigger>}
-          {isSuperAdmin && <TabsTrigger value="admin-actions" data-testid="tab-admin-actions"><ClipboardList className="w-4 h-4 mr-1" />Admin’s actions</TabsTrigger>}
-          {isSuperAdmin && <TabsTrigger value="backup" data-testid="tab-admin-backup"><BoxIcon className="w-4 h-4 mr-1" />Backup</TabsTrigger>}
-          <TabsTrigger value="settings" data-testid="tab-admin-settings"><Settings className="w-4 h-4 mr-1" />Settings</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="users"><UsersTab /></TabsContent>
-        <TabsContent value="orders"><OrdersTab /></TabsContent>
-        <TabsContent value="targets"><TargetsTab /></TabsContent>
-        <TabsContent value="stores"><StoresTab /></TabsContent>
-        <TabsContent value="catalog"><CatalogTab /></TabsContent>
-        <TabsContent value="delivery"><AdminOrderTab /></TabsContent>
-        <TabsContent value="withdrawals"><WithdrawalsTab /></TabsContent>
-        <TabsContent value="notices"><NoticesTab /></TabsContent>
-        <TabsContent value="resets"><ResetsTab /></TabsContent>
-        <TabsContent value="records"><RecordsTab /></TabsContent>
-        <TabsContent value="reference-search"><AdminReferenceSearchTab /></TabsContent>
-        {isSuperAdmin && <TabsContent value="admins"><AdminsTab /></TabsContent>}
-        {isSuperAdmin && <TabsContent value="admin-actions"><AdminActionsTab /></TabsContent>}
-        {isSuperAdmin && <TabsContent value="backup"><BackupTab /></TabsContent>}
-        <TabsContent value="settings"><SiteSettingsTab /></TabsContent>
-      </Tabs>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { queryClient } from "@/lib/queryClient";
+import { getStoredToken, queryClient } from "@/lib/queryClient";
 
 interface WSMessage {
   type: string;
@@ -54,13 +54,13 @@ export function WSProvider({ userId, children }: { userId: string | null; childr
   useEffect(() => {
     if (!userId) return;
 
-    const ws = new WebSocket(getWsUrl());
+    const token = getStoredToken();
+    const ws = token
+      ? new WebSocket(getWsUrl(), ["marketnest.jwt", token])
+      : new WebSocket(getWsUrl());
     wsRef.current = ws;
 
-    ws.onopen = () => {
-      setIsConnected(true);
-      ws.send(JSON.stringify({ type: "auth", userId }));
-    };
+    ws.onopen = () => setIsConnected(true);
 
     ws.onmessage = (e) => {
       try {

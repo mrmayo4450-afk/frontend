@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useAuth } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -154,17 +153,6 @@ export default function MyOrders() {
     onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
 
-  const rejectMutation = useMutation({
-    mutationFn: (orderId: string) => apiRequest("PATCH", `/api/orders/${orderId}/reject`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/orders/my"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/products/admin-catalog"] });
-      toast({ title: "Order removed", description: "The order has been cancelled and stock restored." });
-    },
-    onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
-  });
-
   const openChat = () => {
     const chatBtn = document.querySelector('[data-testid="button-chat-toggle"]') as HTMLElement;
     if (chatBtn) chatBtn.click();
@@ -221,8 +209,16 @@ export default function MyOrders() {
                             <span className="font-semibold text-sm" data-testid={`text-pending-bulk-sn-${bo.id}`}>{bo.batchSn}</span>
                             <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-[10px] px-1.5 py-0">Awaiting Your Response</Badge>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {bo.items.length} item{bo.items.length !== 1 ? "s" : ""} • Total: <span className="font-medium text-foreground">${totalCostNum.toFixed(2)}</span> • Profit: <span className="text-green-600 font-medium">+${totalProfitNum.toFixed(2)}</span>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {bo.items.length} item{bo.items.length !== 1 ? "s" : ""}
+                          </p>
+                          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 rounded-md border bg-background/70 p-2.5 text-xs sm:grid-cols-3">
+                            <div><span className="block text-muted-foreground">Due on acceptance</span><span className="font-semibold text-foreground">${totalCostNum.toFixed(2)}</span></div>
+                            <div><span className="block text-muted-foreground">Selling amount</span><span className="font-semibold text-foreground">${(totalCostNum + totalProfitNum).toFixed(2)}</span></div>
+                            <div className="col-span-2 sm:col-span-1"><span className="block text-muted-foreground">Net profit at completion</span><span className="font-semibold text-emerald-700 dark:text-emerald-400">+${totalProfitNum.toFixed(2)}</span></div>
+                          </div>
+                          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                            Accepting deducts the cost from your balance. Once the order is completed, the full selling amount (cost + net profit) is credited back.
                           </p>
                           <div className="flex items-center gap-1 mt-1 text-xs text-amber-600">
                             <Clock className="w-3 h-3" />
@@ -243,9 +239,9 @@ export default function MyOrders() {
                       {isExpanded && (
                         <div className="mt-3 space-y-1.5 border-t pt-2">
                           {bo.items.map(item => (
-                            <div key={item.id} className="flex items-center justify-between text-xs p-2 bg-background rounded border" data-testid={`row-pending-bulk-item-${item.id}`}>
-                              <span className="font-medium">{item.productName}</span>
-                              <span className="text-muted-foreground">×{item.quantity} • Cost ${parseFloat(item.costPrice).toFixed(2)} • Sell ${parseFloat(item.sellingPrice).toFixed(2)}</span>
+                            <div key={item.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs p-2 bg-background rounded border" data-testid={`row-pending-bulk-item-${item.id}`}>
+                              <span className="font-medium">{item.productName} <span className="text-muted-foreground font-normal">×{item.quantity}</span></span>
+                              <span className="text-muted-foreground">Unit cost ${parseFloat(item.costPrice).toFixed(2)} · Sell ${parseFloat(item.sellingPrice).toFixed(2)}</span>
                             </div>
                           ))}
                           {bo.shippingAddress && <p className="text-xs text-muted-foreground pt-1"><span className="font-medium">Ship to:</span> {bo.shippingAddress}</p>}
@@ -258,11 +254,29 @@ export default function MyOrders() {
                           size="sm"
                           className="flex-1 h-8 text-xs bg-green-600 hover:bg-green-700 text-white"
                           disabled={!canAfford || acceptBulkMutation.isPending}
-                          onClick={() => acceptBulkMutation.mutate(bo.id)}
+                          onClick={() => {
+                            if (window.confirm(`Accept batch ${bo.batchSn}? $${totalCostNum.toFixed(2)} will be deducted from your balance now. At completion, $${(totalCostNum + totalProfitNum).toFixed(2)} (cost plus $${totalProfitNum.toFixed(2)} net profit) will be credited.`)) {
+                              acceptBulkMutation.mutate(bo.id);
+                            }
+                          }}
                           data-testid={`button-accept-bulk-${bo.id}`}
                         >
                           <CheckCircle className="w-3 h-3 mr-1" />
-                          Accept & Pay ${totalCostNum.toFixed(2)}
+                          {acceptBulkMutation.isPending ? "Accepting…" : `Accept · pay $${totalCostNum.toFixed(2)}`}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs"
+                          disabled={declineBulkMutation.isPending || acceptBulkMutation.isPending}
+                          onClick={() => {
+                            if (window.confirm(`Decline batch ${bo.batchSn}? This decision cannot be undone here.`)) {
+                              declineBulkMutation.mutate(bo.id);
+                            }
+                          }}
+                          data-testid={`button-decline-bulk-${bo.id}`}
+                        >
+                          {declineBulkMutation.isPending ? "Declining…" : "Decline"}
                         </Button>
                       </div>
                     </CardContent>
@@ -279,6 +293,12 @@ export default function MyOrders() {
                   expired: "text-gray-500",
                   completed: "text-green-600",
                 };
+                const statusLabel: Record<string, string> = {
+                  accepted: "Accepted · awaiting completion",
+                  declined: "Declined",
+                  expired: "Expired",
+                  completed: "Completed · proceeds credited",
+                };
                 return (
                   <Card key={bo.id} className="opacity-80" data-testid={`card-bulk-history-${bo.id}`}>
                     <CardContent className="p-3">
@@ -290,10 +310,12 @@ export default function MyOrders() {
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-sm">{bo.batchSn}</span>
                             <span className={`text-xs font-medium ${statusStyle[bo.status] ?? "text-muted-foreground"}`} data-testid={`text-bulk-history-status-${bo.id}`}>
-                              {bo.status.charAt(0).toUpperCase() + bo.status.slice(1)}
+                              {statusLabel[bo.status] ?? bo.status}
                             </span>
                           </div>
-                          <p className="text-xs text-muted-foreground">{bo.items.length} items • ${totalCostNum.toFixed(2)} • +${totalProfitNum.toFixed(2)} profit</p>
+                          <p className="text-xs text-muted-foreground">{bo.items.length} items · Cost ${totalCostNum.toFixed(2)} · Sell ${(totalCostNum + totalProfitNum).toFixed(2)}</p>
+                          {bo.status === "accepted" && <p className="mt-1 text-[11px] text-muted-foreground">Cost was deducted at acceptance. Full selling amount of ${(totalCostNum + totalProfitNum).toFixed(2)} is credited when completed; net profit is +${totalProfitNum.toFixed(2)}.</p>}
+                          {bo.status === "completed" && <p className="mt-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">Credited: ${(totalCostNum + totalProfitNum).toFixed(2)} · Net profit: +${totalProfitNum.toFixed(2)}</p>}
                         </div>
                         <p className="text-xs text-muted-foreground">{new Date(bo.createdAt).toLocaleDateString()}</p>
                       </div>
@@ -443,6 +465,12 @@ export default function MyOrders() {
                               );
                             })()}
                           </div>
+                          {order.status === "pending" && (!order.orderedBy || order.orderedBy === order.buyerId) && (
+                            <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200" data-testid={`text-paid-order-support-${order.id}`}>
+                              <span>This paid order cannot be cancelled here. Contact Support to request a manual refund.</span>
+                              <button className="font-medium underline underline-offset-2 whitespace-nowrap" onClick={openChat}>Contact Support</button>
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
 
