@@ -3655,7 +3655,7 @@ function AdminReferenceSearchTab() {
               <p><span className="text-muted-foreground">Username: </span>{result.administrator.username}</p>
               <p><span className="text-muted-foreground">Email: </span>{result.administrator.email}</p>
               <p><span className="text-muted-foreground">Reference code: </span><span className="font-mono">{result.administrator.referenceCode}</span></p>
-              <p><span className="text-muted-foreground">Role: </span>{result.administrator.role}</p>
+              <p><span className="text-muted-foreground">Role: </span>{result.administrator.role === "client" ? "Former administrator" : result.administrator.role}</p>
             </CardContent>
           </Card>
           <div className="space-y-3">
