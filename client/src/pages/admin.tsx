@@ -948,6 +948,9 @@ function StoresTab() {
   const { user: currentUser } = useAuth();
   const isSuperAdmin = currentUser?.role === "superadmin";
   const { data: allStores, isLoading } = useQuery<StoreType[]>({ queryKey: ["/api/stores"] });
+  const { data: pendingNics } = useQuery<{ id: string; nicImageUrl: string | null }[]>({
+    queryKey: ["/api/admin/stores/pending-nics"],
+  });
   const { data: users } = useQuery<Omit<User, "password">[]>({ queryKey: ["/api/users"] });
   const { data: adminCatalog } = useQuery<Product[]>({ queryKey: ["/api/products/admin-catalog"] });
   const [editingStore, setEditingStore] = useState<string | null>(null);
@@ -1007,6 +1010,7 @@ function StoresTab() {
     mutationFn: (id: string) => apiRequest("PATCH", "/api/stores/" + id + "/approve"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/stores"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stores/pending-nics"] });
       toast({ title: "Store approved" });
     },
     onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
@@ -1016,6 +1020,7 @@ function StoresTab() {
     mutationFn: (id: string) => apiRequest("PATCH", "/api/stores/" + id + "/reject"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/stores"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stores/pending-nics"] });
       toast({ title: "Store rejected" });
     },
     onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
@@ -1059,14 +1064,22 @@ function StoresTab() {
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-sm" data-testid={`text-pending-store-name-${store.id}`}>{store.name}</p>
                         <p className="text-xs text-muted-foreground">Owner: {owner?.username ?? "Unknown"}</p>
-                        {store.nicImageUrl && <img src={resolveUrl(store.nicImageUrl)} alt="NIC" className="w-full h-32 object-cover rounded-md border mt-2" data-testid={"img-nic-" + store.id} />}
+                        {pendingNics?.find(nic => nic.id === store.id)?.nicImageUrl && (
+                          <img src={resolveUrl(pendingNics.find(nic => nic.id === store.id)!.nicImageUrl!)} alt="NIC" className="w-full h-32 object-cover rounded-md border mt-2" data-testid={"img-nic-" + store.id} />
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <Button
                         size="sm"
                         className="bg-green-600 hover:bg-green-700 text-white"
-                        onClick={() => approveMutation.mutate(store.id)}
+                        onClick={() => {
+                          if (!isSuperAdmin) {
+                            toast({ title: "Contact a superadmin", description: "Only a superadmin can approve pending stores." });
+                            return;
+                          }
+                          approveMutation.mutate(store.id);
+                        }}
                         disabled={approveMutation.isPending}
                         data-testid={`button-approve-store-${store.id}`}
                       >
@@ -3602,6 +3615,150 @@ function RecordsNoticesSection() {
   );
 }
 
+type ReferenceSearchResult = {
+  administrator: { id: string; username: string; email: string; referenceCode: string; role: string };
+  customers: { id: string; username: string; email: string; phone: string | null; storeId: string | null; storeName: string | null; storeReferenceCode: string | null; isApproved: boolean }[];
+};
+
+function AdminReferenceSearchTab() {
+  const [code, setCode] = useState("");
+  const [submittedCode, setSubmittedCode] = useState("");
+  const searchUrl = `/api/admin/reference-search?code=${encodeURIComponent(submittedCode)}`;
+  const { data: result, isLoading, isError, error, refetch } = useQuery<ReferenceSearchResult>({
+    queryKey: [searchUrl],
+    enabled: !!submittedCode,
+  });
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader><CardTitle className="text-base">Search by store-registration code</CardTitle></CardHeader>
+        <CardContent>
+          <form className="flex flex-col sm:flex-row gap-2" onSubmit={event => { event.preventDefault(); setSubmittedCode(code.trim()); }}>
+            <Input value={code} onChange={event => setCode(event.target.value)} placeholder="Enter registration code" aria-label="Store registration code" data-testid="input-admin-reference-code" />
+            <Button type="submit" disabled={!code.trim()} data-testid="button-admin-reference-search">Search</Button>
+          </form>
+        </CardContent>
+      </Card>
+      {isLoading && <div className="space-y-3"><Skeleton className="h-24 w-full" /><Skeleton className="h-20 w-full" /></div>}
+      {isError && (
+        <Card><CardContent className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <p className="text-sm text-destructive">{(error as Error)?.message || "Unable to search this reference code."}</p>
+          <Button size="sm" variant="outline" onClick={() => refetch()}>Retry</Button>
+        </CardContent></Card>
+      )}
+      {!isLoading && !isError && submittedCode && result && (
+        <>
+          <Card data-testid="card-reference-administrator">
+            <CardHeader><CardTitle className="text-base">Administrator</CardTitle></CardHeader>
+            <CardContent className="grid gap-2 sm:grid-cols-2 text-sm">
+              <p><span className="text-muted-foreground">Username: </span>{result.administrator.username}</p>
+              <p><span className="text-muted-foreground">Email: </span>{result.administrator.email}</p>
+              <p><span className="text-muted-foreground">Reference code: </span><span className="font-mono">{result.administrator.referenceCode}</span></p>
+              <p><span className="text-muted-foreground">Role: </span>{result.administrator.role}</p>
+            </CardContent>
+          </Card>
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold">Matching customers and stores <Badge variant="secondary" className="ml-1">{result.customers.length}</Badge></h3>
+            {result.customers.map(customer => (
+              <Card key={customer.id} data-testid={`card-reference-customer-${customer.id}`}>
+                <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                  <Avatar><AvatarFallback className="bg-primary/10 text-primary font-bold">{customer.username.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm">{customer.username}</p>
+                    <p className="text-xs text-muted-foreground">{customer.email}{customer.phone ? ` · ${customer.phone}` : ""}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Store: {customer.storeName || "No store"}{customer.storeReferenceCode ? ` · Code ${customer.storeReferenceCode}` : ""}</p>
+                  </div>
+                  <Badge variant={customer.isApproved ? "default" : "secondary"}>{customer.isApproved ? "Approved" : "Pending"}</Badge>
+                </CardContent>
+              </Card>
+            ))}
+            {result.customers.length === 0 && <div className="text-center py-10 text-sm text-muted-foreground">No customers or stores match this registration code.</div>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+type AdminActionRecord = {
+  id: string;
+  actorId: string;
+  actorUsername: string;
+  actorEmail: string;
+  action: string;
+  targetId: string | null;
+  targetUsername: string | null;
+  targetEmail: string | null;
+  details: unknown;
+  createdAt: string;
+};
+
+function formatActionDetail(value: unknown) {
+  if (value == null || value === "") return "—";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function AdminActionsTab() {
+  const [adminId, setAdminId] = useState("all");
+  const { data: admins } = useQuery<(Omit<User, "password"> & { customerCount?: number })[]>({ queryKey: ["/api/admins"] });
+  const actionsUrl = `/api/admin/actions?${adminId !== "all" ? `adminId=${encodeURIComponent(adminId)}&` : ""}limit=100`;
+  const { data: actions, isLoading, isError, error, refetch } = useQuery<AdminActionRecord[]>({ queryKey: [actionsUrl] });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div><h3 className="font-semibold">Admin’s actions</h3><p className="text-xs text-muted-foreground">Audit trail for administrator activity</p></div>
+        <Select value={adminId} onValueChange={setAdminId}>
+          <SelectTrigger className="w-full sm:w-64" aria-label="Filter actions by administrator"><SelectValue placeholder="All administrators" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All administrators</SelectItem>
+            {admins?.map(admin => <SelectItem key={admin.id} value={admin.id}>{admin.username}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+      {isLoading && <div className="space-y-3">{Array(4).fill(0).map((_, index) => <Skeleton key={index} className="h-24 w-full" />)}</div>}
+      {isError && <Card><CardContent className="p-6 flex items-center justify-between gap-3"><p className="text-sm text-destructive">{(error as Error)?.message || "Unable to load administrator actions."}</p><Button size="sm" variant="outline" onClick={() => refetch()}>Retry</Button></CardContent></Card>}
+      {!isLoading && !isError && actions?.map(record => {
+        const details = typeof record.details === "string"
+          ? (() => { try { return JSON.parse(record.details) as Record<string, unknown>; } catch { return { note: record.details }; } })()
+          : (record.details && typeof record.details === "object" ? record.details as Record<string, unknown> : {});
+        const detailEntries = Object.entries(details);
+        const isBalanceChange = /balance|credit/i.test(record.action) || ["previousBalance", "newBalance", "amount"].some(key => key in details);
+        return (
+          <Card key={record.id} data-testid={`card-admin-action-${record.id}`}>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                <div>
+                  <p className="font-semibold text-sm">{record.action}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(record.createdAt).toLocaleString()}</p>
+                </div>
+                {isBalanceChange && <Badge variant="secondary">Balance change</Badge>}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 text-xs">
+                <p><span className="text-muted-foreground">Administrator: </span>{record.actorUsername} · {record.actorEmail}</p>
+                <p><span className="text-muted-foreground">Customer / target: </span>{record.targetUsername || record.targetId || "—"}{record.targetEmail ? ` · ${record.targetEmail}` : ""}</p>
+              </div>
+              {detailEntries.length > 0 && (
+                <div className="border-t pt-3 grid gap-x-4 gap-y-2 sm:grid-cols-2 text-xs">
+                  {detailEntries.map(([key, value]) => (
+                    <p key={key} className={key.toLowerCase().includes("note") ? "sm:col-span-2" : ""}>
+                      <span className="text-muted-foreground">{key.replace(/([A-Z])/g, " $1").replace(/^./, character => character.toUpperCase())}: </span>
+                      {formatActionDetail(value)}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+      {!isLoading && !isError && (actions?.length ?? 0) === 0 && <div className="text-center py-12 text-muted-foreground"><ClipboardList className="w-10 h-10 mx-auto mb-2 opacity-30" /><p>No administrator actions found</p></div>}
+    </div>
+  );
+}
+
 export default function AdminPanel() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -3737,7 +3894,9 @@ export default function AdminPanel() {
             <ClipboardList className="w-4 h-4 mr-2" />
             Records
           </TabsTrigger>
+          <TabsTrigger value="reference-search" data-testid="tab-admin-reference-search"><Store className="w-4 h-4 mr-1" />Code Search</TabsTrigger>
           {isSuperAdmin && <TabsTrigger value="admins" data-testid="tab-admin-admins"><Shield className="w-4 h-4 mr-1" />Admins</TabsTrigger>}
+          {isSuperAdmin && <TabsTrigger value="admin-actions" data-testid="tab-admin-actions"><ClipboardList className="w-4 h-4 mr-1" />Admin’s actions</TabsTrigger>}
           {isSuperAdmin && <TabsTrigger value="backup" data-testid="tab-admin-backup"><BoxIcon className="w-4 h-4 mr-1" />Backup</TabsTrigger>}
           <TabsTrigger value="settings" data-testid="tab-admin-settings"><Settings className="w-4 h-4 mr-1" />Settings</TabsTrigger>
         </TabsList>
@@ -3752,7 +3911,9 @@ export default function AdminPanel() {
         <TabsContent value="notices"><NoticesTab /></TabsContent>
         <TabsContent value="resets"><ResetsTab /></TabsContent>
         <TabsContent value="records"><RecordsTab /></TabsContent>
+        <TabsContent value="reference-search"><AdminReferenceSearchTab /></TabsContent>
         {isSuperAdmin && <TabsContent value="admins"><AdminsTab /></TabsContent>}
+        {isSuperAdmin && <TabsContent value="admin-actions"><AdminActionsTab /></TabsContent>}
         {isSuperAdmin && <TabsContent value="backup"><BackupTab /></TabsContent>}
         <TabsContent value="settings"><SiteSettingsTab /></TabsContent>
       </Tabs>
